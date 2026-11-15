@@ -29,9 +29,18 @@ Then enable **Foundry Token Patroller** in your world's *Manage Modules* and rel
 3. **Move the token** a few squares and click **Add Point** again. Repeat to build the route.
 4. The plotted points are shown as **dots**, connected by an **animated dashed line** in the token's route color. All plotted routes are visible at all times (GM only) — you no longer need to keep the token selected to see them.
 
+### Editing points with the Patrol Tool (left toolbar)
+
+- Click the **route icon** in the left scene toolbar to open the **Patrol Tool**, then toggle **Edit patrol points** (map-marker icon).
+- While the tool is active, every plotted point dot is interactive:
+    - **Left-click a point** to select it — it gets a white ring and a small options popup appears with **Delete point** (drag hint included).
+    - **Drag a point** on the map to move it — it snaps to the grid (unless the scene is gridless) and the route line follows live; the new position is saved when you release.
+    - **Right-click a point** to delete it immediately.
+- While the tool is inactive, the point dots don't intercept mouse clicks.
+
 ### Deleting points
 
-- **Left-click a point dot** on the canvas to delete that single point.
+- With the **Patrol Tool** active: left-click a point dot and choose **Delete point** in the popup, or right-click the dot.
 - Click the **trash icon** in the token HUD to delete **all** points of the token, or just the **last** point (you choose in the dialog).
 
 ### Starting / stopping a patrol
@@ -61,6 +70,7 @@ Available on the global `TP` object (GM side), handy for macros:
 ```js
 TP.tokenPatroller.addPlotPoint(tokenId);              // record the token's current position as a point
 TP.tokenPatroller.removePlotPoint(tokenId, index);    // delete one plotted point by index
+TP.tokenPatroller.movePlotPoint(tokenId, index, { x: 100, y: 200 }); // move one plotted point
 TP.tokenPatroller.startPatrol("2", tokenId);          // start patrolling, 2s between points
 TP.tokenPatroller.stopPatrol(tokenId);                // stop patrolling
 ```

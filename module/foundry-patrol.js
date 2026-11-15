@@ -5,6 +5,7 @@ import { TokenPatrollerManager } from "./patroller.js";
 import { TokenHud } from "./hud.js";
 import { RoutesLayer } from "./routes-layer.js";
 import { registerKeybindings } from "./keys.js";
+import { registerPatrolControl } from "./controls.js";
 import { VisionHandler } from "./vision.js";
 import { SpeechHandler } from "./speech.js";
 import { AudioHandler } from "./audio.js";
@@ -34,6 +35,7 @@ Hooks.once("init", () => {
     registerSettings();
     registerKeybindings();
     registerHandlebarsHelpers();
+    registerPatrolControl();
     CONFIG.Canvas.layers.patrolRoutes = { layerClass: RoutesLayer, group: "primary" };
 });
 
