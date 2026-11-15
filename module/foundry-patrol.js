@@ -59,7 +59,6 @@ Hooks.on("controlToken", async (token, controlled) => {
     if (controlled) {
         await TP.tokenPatroller.livePlotUpdate(token.id);
     } else {
-        await TP.tokenPatroller._removePlotDrawing(token.id);
         await routesLayer()?.draw();
     }
 });

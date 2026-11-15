@@ -36,8 +36,8 @@ export class TokenHud {
             return el;
         };
 
-        const addPlotPoint = iconDiv(`<img src="modules/${MODULE}/imgs/svg/map.svg" width="36" height="36">`, "Add Point");
-        const deletePlotPoint = iconDiv(`<i class="fas fa-trash-alt"></i>`, "Delete Point");
+        const addPlotPoint = iconDiv(`<img src="modules/${MODULE}/imgs/svg/map.svg" width="36" height="36">`, "Add Point (records the token's current position)");
+        const deletePlotPoint = iconDiv(`<i class="fas fa-trash-alt"></i>`, "Delete points (all, or last)");
         const plotDirection = isInverted
             ? iconDiv(`<i class="fas fa-arrows-alt-h"></i>`, "Forwards-Backwards Mode")
             : iconDiv(`<i class="fas fa-recycle"></i>`, "Cycle Mode");

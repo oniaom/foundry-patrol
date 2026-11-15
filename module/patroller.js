@@ -426,7 +426,7 @@ export class TokenPatrollerManager {
 
     async removeAllTokenRoutes() {
         await this._saveAndUpdate({});
-        await this._removePlotDrawing(null);
+        await this.livePlotUpdate();
     }
 
     _generateColor() {
@@ -466,8 +466,8 @@ export class TokenPatrollerManager {
         if (audioId) canvas.sounds.get(audioId)?.document.delete();
 
         delete this.tokenMap[tokenId];
-        await this._removePlotDrawing(tokenId);
         await this._saveAndUpdate(this.tokenMap);
+        await this.livePlotUpdate();
     }
 
     async deleteAmbientSound(tokenId) {
@@ -481,38 +481,72 @@ export class TokenPatrollerManager {
         await this._saveAndUpdate(this.tokenMap);
     }
 
-    async livePlotUpdate(tokenId) {
-        if (tokenId && !this.tokenMap[tokenId]) return;
-        await this._removePlotDrawing(tokenId);
-        if (tokenId) await this._displayPlot(tokenId, this.tokenMap[tokenId].inverted);
+    async livePlotUpdate() {
+        await this._syncRoutesFlag();
         await routesLayer()?.draw();
     }
 
-    async _removePlotDrawing(tokenId) {
+    /**
+     * Writes every token's plotted points into the scene "routes" flag, so the
+     * RoutesLayer can render all routes persistently (not just the selected token).
+     */
+    async _syncRoutesFlag() {
         const scene = canvas.scene;
         if (!scene) return;
-        let routes = foundry.utils.duplicate(scene.getFlag(MODULE, "routes") ?? {});
-        if (tokenId) delete routes[tokenId];
-        else routes = {};
+        const routes = {};
+        for (const [tokenId, data] of Object.entries(this.tokenMap ?? {})) {
+            const plots = data?.plots;
+            if (!plots || plots.length == 0) continue;
+            routes[tokenId] = {
+                points: foundry.utils.duplicate(plots),
+                dash: 25,
+                gap: 25,
+                offset: 750,
+                color: data.color,
+                fb: !!data.inverted,
+                tokenId: tokenId,
+            };
+        }
         await scene.setFlag(MODULE, "routes", routes);
     }
 
-    async _displayPlot(tokenId, forwardsBackwards) {
-        const scene = canvas.scene;
-        const plots = this._getPlotsFromId(tokenId);
-        if (!scene || !plots || plots.length == 0) return;
+    async removePlotPoint(tokenId, index) {
+        const data = this.tokenMap[tokenId];
+        if (!data || !Array.isArray(data.plots)) return;
+        if (!Number.isInteger(index) || index < 0 || index >= data.plots.length) return;
+        data.plots.splice(index, 1);
+        data.lastPos = 0;
+        if (data.isLinear) await this._rebuildLinearRoutes(tokenId);
+        await this._saveAndUpdate(this.tokenMap);
+        await this.livePlotUpdate();
+    }
 
-        const routes = foundry.utils.duplicate(scene.getFlag(MODULE, "routes") ?? {});
-        routes[tokenId] = {
-            points: plots,
-            dash: 25,
-            gap: 25,
-            offset: 750,
-            color: this._getGeneral(tokenId, "color"),
-            fb: forwardsBackwards,
-            tokenId: tokenId,
-        };
-        await scene.setFlag(MODULE, "routes", routes);
+    async _rebuildLinearRoutes(tokenId) {
+        if (canvas.grid.type != CONST.GRID_TYPES.SQUARE) return;
+        const plots = this._getPlotsFromId(tokenId) ?? [];
+        const cont = this._getGeneral(tokenId, "countinousRoutes");
+        const end = this._getGeneral(tokenId, "endCountinousRoutes");
+        cont.length = 0;
+        end.length = 0;
+        if (plots.length == 0) {
+            this._getGeneral(tokenId, "linearPath").length = 0;
+            return;
+        }
+        cont.push({ x: plots[0].x, y: plots[0].y });
+        for (let i = 1; i < plots.length; i++) {
+            const src = { x: plots[i - 1].x, y: plots[i - 1].y };
+            const dest = plots[i];
+            const xMod = dest.x >= src.x ? 1 : -1;
+            const yMod = dest.y >= src.y ? 1 : -1;
+            await this._generateLinearRoute(cont, src, dest, xMod, yMod);
+        }
+        if (plots.length >= 2) {
+            const len = plots.length - 1;
+            const xMod = plots[0].x >= plots[len].x ? 1 : -1;
+            const yMod = plots[0].y >= plots[len].y ? 1 : -1;
+            if (await this._generateLinearRoute(end, { x: plots[len].x, y: plots[len].y }, plots[0], xMod, yMod))
+                this._generateLinearPath(tokenId);
+        }
     }
 
     _getPlotsFromId(tokenId) {
