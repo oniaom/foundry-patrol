@@ -101,6 +101,10 @@ export function registerPatrolControl() {
             name: "patrol",
             title: "Patrol Tool",
             icon: "fas fa-route",
+            // Associating the control with the routes layer makes Foundry activate
+            // that layer when the tool is selected, so canvas pointer events are
+            // dispatched to it (without this the markers are never hit-tested).
+            layer: "patrolRoutes",
             visible: true,
             activeTool: "edit",
             tools: {

@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [3.2.1] - Bug fix
+### Bug Fixes:
+- Fixed plot points never being selectable/editable with the Patrol Tool (the sidebar button appeared, but clicks on points did nothing): the patrol scene control is now associated with its layer (`layer: "patrolRoutes"`) so Foundry activates the routes layer when the tool is selected and dispatches canvas pointer events to it. Additionally, edit mode now makes the layer itself interactive and hit-tests points at the layer level (`RoutesLayer._handleLayerPointerDown` + `RouteDrawing.hitTestMarker`), so selection/drag/delete work even when per-object PIXI hit testing doesn't reach the markers; marker handlers call `stopPropagation()` to avoid double handling.
+
 ## [3.2.0] - Patrol Tool scene control
 ### Added:
 - New **Patrol Tool** scene control on the left toolbar (route icon, GM only) with an "Edit patrol points" toggle. While active, plotted point markers are interactive: left-click a point to select it (a small options popup offers **Delete point**), **drag** the point on the map to move it (snapped to the grid unless gridless), or right-click a point to delete it immediately. A selected point is highlighted with a white ring. While the tool is inactive, markers no longer intercept canvas clicks.
