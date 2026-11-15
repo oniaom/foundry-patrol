@@ -29,18 +29,17 @@ Then enable **Foundry Token Patroller** in your world's *Manage Modules* and rel
 3. **Move the token** a few squares and click **Add Point** again. Repeat to build the route.
 4. The plotted points are shown as **dots**, connected by an **animated dashed line** in the token's route color. All plotted routes are visible at all times (GM only) — you no longer need to keep the token selected to see them.
 
-### Editing points with the Patrol Tool (left toolbar)
+### Editing points (GM)
 
-- Click the **route icon** in the left scene toolbar to open the **Patrol Tool**, then toggle **Edit patrol points** (map-marker icon).
-- While the tool is active, every plotted point dot is interactive:
-    - **Left-click a point** to select it — it gets a white ring and a small options popup appears with **Delete point** (drag hint included).
-    - **Drag a point** on the map to move it — it snaps to the grid (unless the scene is gridless) and the route line follows live; the new position is saved when you release.
-    - **Right-click a point** to delete it immediately.
-- While the tool is inactive, the point dots don't intercept mouse clicks.
+Every plotted point dot is directly clickable on the map — no toolbar tool needed:
+
+- **Left-click a point** — it gets a white ring and a small options popup appears with **Delete point** and **Move point**.
+- **Drag a point** on the map to move it — it snaps to the grid (unless the scene is gridless) and the route line follows live; the new position is saved when you release.
+- **Right-click a point** to delete it immediately.
 
 ### Deleting points
 
-- With the **Patrol Tool** active: left-click a point dot and choose **Delete point** in the popup, or right-click the dot.
+- Left-click a point dot and choose **Delete point** in the popup, or right-click the dot.
 - Click the **trash icon** in the token HUD to delete **all** points of the token, or just the **last** point (you choose in the dialog).
 
 ### Starting / stopping a patrol

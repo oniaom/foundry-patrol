@@ -3,9 +3,8 @@ import { TP } from "./tp.js";
 import { PatrolDataManager } from "./store.js";
 import { TokenPatrollerManager } from "./patroller.js";
 import { TokenHud } from "./hud.js";
-import { RoutesLayer } from "./routes-layer.js";
+import { RoutesLayer, registerCanvasPointInteraction } from "./routes-layer.js";
 import { registerKeybindings } from "./keys.js";
-import { registerPatrolControl } from "./controls.js";
 import { VisionHandler } from "./vision.js";
 import { SpeechHandler } from "./speech.js";
 import { AudioHandler } from "./audio.js";
@@ -35,8 +34,11 @@ Hooks.once("init", () => {
     registerSettings();
     registerKeybindings();
     registerHandlebarsHelpers();
-    registerPatrolControl();
     CONFIG.Canvas.layers.patrolRoutes = { layerClass: RoutesLayer, group: "primary" };
+    // Clicking a plotted point circle (delete / move options) is handled at the
+    // DOM level on the canvas element, so it works no matter which canvas layer
+    // is active. (Re)bind whenever the canvas is (re)drawn for a scene.
+    Hooks.on("canvasReady", () => registerCanvasPointInteraction());
 });
 
 Hooks.once("ready", async () => {
