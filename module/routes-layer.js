@@ -10,11 +10,12 @@ export class RoutesLayer extends CanvasLayer {
         this._drawings = [];
     }
 
-    async draw() {
+    // v13+ draws layers through the template methods draw() -> _draw() and tearDown() -> _tearDown(),
+    // so both canvas-driven draws and direct routesLayer().draw() redraws land here.
+    async _draw() {
         for (const drawing of this._drawings) drawing.destroy();
         this._drawings = [];
         this.removeChildren().forEach((child) => child.destroy({ children: true }));
-        await super.draw();
         this.visible = game.user.isGM;
         this.objects = this.addChild(new PIXI.Container());
         const routes = canvas.scene?.getFlag(MODULE, "routes") ?? {};
@@ -25,10 +26,10 @@ export class RoutesLayer extends CanvasLayer {
         }
     }
 
-    async tearDown() {
+    async _tearDown() {
         for (const drawing of this._drawings) drawing.destroy();
         this._drawings = [];
-        return super.tearDown();
+        this.removeChildren().forEach((child) => child.destroy({ children: true }));
     }
 }
 
