@@ -1,5 +1,5 @@
 # IMPORTANT NOTE
-This project is no longer being developed or worked on.
+This is an actively maintained fork, updated for Foundry VTT V13 and V14.
 
 
 # Foundry Token Patrol
@@ -22,7 +22,7 @@ If your computer is capable of handling all the weight, by all means, please go 
 
 ### FVTT Version
 
--   Tested on FVTT v0.5.5
+-   Requires Foundry VTT V13 or later (verified on V14)
 -   No known module incompatibilities.
 
 ### IMPORTANT / BUGS
@@ -109,13 +109,13 @@ API calling available: Namespaced under TP these are good for macros!
 
 To install Foundry-patrol, do the following:
 
-1. [Download the zip file](https://github.com/JacobMcAuley/foundry-patrol/archive/master.zip)
+1. [Download the zip file](https://github.com/oniaom/foundry-patrol/archive/master.zip)
 2. Extract the folder to your modules in Foundry VTT.
 3. Reload your application.
 
 Auto-Installation Instructions:
 
-1. Copy this link: https://github.com/JacobMcAuley/foundry-patrol/raw/master/module.json
+1. Copy this link: https://github.com/oniaom/foundry-patrol/raw/master/module.json
 2. Open FoundryVTT and navigate to Add-On Modules
 3. Select "Install Module" and paste link into textbox.
 4. Click "Install" and watch as the mod is installed!

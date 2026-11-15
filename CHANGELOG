@@ -3,6 +3,26 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [3.0.0] - Foundry VTT V13/V14 modernization
+### Changed:
+- Migrated the module to Foundry VTT V13+ / V14: modern `module.json` manifest with `esmodules` and a `compatibility` block (minimum 13, verified 14)
+- Rewrote the codebase as ES modules under `module/` (was a single legacy script)
+- Replaced the vendored Azzurite settings-extender with core keybindings (`game.keybindings.register`), configurable in the Controls settings
+- Patrol data is now stored in the viewed scene's module flags instead of a journal entry file
+- Token data access updated to the V10+ document model (`token.document`, `token.x/y`, `canvas.grid.type`, ...)
+- Custom routes layer is registered through `CONFIG.Canvas.layers` instead of monkey-patching `Canvas.layers`
+- Route rendering updated to PIXI v8 (`stroke()` instead of the removed `lineStyle()`)
+- Token movement waits on `Token#movementAnimationPromise`; token rotation uses `atan2` so tokens face their direction of travel
+- Vision checks use the token's own vision source (FOV + wall-limited LOS) with a manual range/angle/wall fallback
+- Ambient audio uses `AmbientSound` documents created via `scene.createEmbeddedDocuments` (`walls` flag for local audio)
+- Combat creation uses `Combat.create` / `createEmbeddedDocuments("Combatant", ...)`
+- Token HUD buttons are injected with native DOM (V13+ renders the HUD with ApplicationV2 and passes an HTMLElement to `renderTokenHUD`)
+- Chat messages set the Polyglot language through message flags instead of manipulating the chat input DOM
+
+### Removed:
+- Dropped the bundled `config/settings-extender.js` (Azzu) dependency
+- Dropped the journal-entry based patrol database (`PatrolDataManager` file structure)
+
 ## [2.1.4] - 2020-05-21
 ### Bug Fixes:
 - Updated controlledTokens to controlled so that hotkeys work again
