@@ -1,6 +1,18 @@
 import { MODULE } from "./config.js";
 import { TP } from "./tp.js";
 
+/** Which per-token quote list each speech type draws from (methods on TP.tokenPatroller). */
+const QUOTE_GETTERS = {
+    patrol: "getPatrolQuotes",
+    caught: "getCatchQuotes",
+    other: "getOtherTokenVisionQuotes",
+};
+
+/**
+ * Chat quotes while patrolling / when spotted. Messages are IC ChatMessages
+ * with Polyglot language flags when the Polyglot module is active; `{token.name}`
+ * in a quote is replaced with the first spotted token's name.
+ */
 export class SpeechHandler {
     async createChat(tokenId, message) {
         if (message == undefined) return;
@@ -23,12 +35,14 @@ export class SpeechHandler {
 
     async handleSpeech(tokenId, type, spottedTokens = []) {
         if (!TP.tokenPatroller.getEnableQuotes(tokenId)) return;
+        const getter = QUOTE_GETTERS[type];
+        if (!getter) return;
         let messages;
         if (type === "patrol") {
-            if (this._determineIfPatrolDisplay(tokenId)) messages = TP.tokenPatroller.getPatrolQuotes(tokenId);
-        } else if (type === "caught") messages = TP.tokenPatroller.getCatchQuotes(tokenId);
-        else if (type === "other") messages = TP.tokenPatroller.getOtherTokenVisionQuotes(tokenId);
-        else return;
+            if (this._determineIfPatrolDisplay(tokenId)) messages = TP.tokenPatroller[getter](tokenId);
+        } else {
+            messages = TP.tokenPatroller[getter](tokenId);
+        }
 
         if (!messages || messages.length <= 0) return;
 
@@ -41,6 +55,7 @@ export class SpeechHandler {
         this.createChat(tokenId, message);
     }
 
+    /** Patrol quotes only fire on a percent roll (patrolPercent), 0-100. */
     _determineIfPatrolDisplay(tokenId) {
         const percentChance = TP.tokenPatroller.getPatrolPercent(tokenId) ?? 0;
         const percentRoll = Math.random();

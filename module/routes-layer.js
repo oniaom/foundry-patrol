@@ -1,136 +1,43 @@
 import { MODULE } from "./config.js";
 import { TP } from "./tp.js";
-import { gridSize, routesLayer } from "./util.js";
+import { FLAGS } from "./store.js";
+import { gridSize } from "./util.js";
+import { eventClient, eventGlobal } from "./coords.js";
 import { patrolToolState, showPointMenu, closePointMenu } from "./controls.js";
+import { addCirclePath, strokePath, drawStyledCircle } from "./pixi-compat.js";
 
 const CanvasLayer = foundry.canvas.layers.CanvasLayer ?? globalThis.CanvasLayer;
 
-// Normalizes client (screen) coordinates from either a PIXI federated event or a DOM event.
-function eventClient(event) {
-    if (event?.client && typeof event.client.x === "number") return event.client;
-    return { x: event?.clientX ?? 0, y: event?.clientY ?? 0 };
-}
-
-// Normalizes world (scene) coordinates from either a PIXI federated event or a DOM event.
-function eventGlobal(event) {
-    return event?.global ?? event?.data?.global ?? null;
-}
-
-// Converts a DOM pointer event on the canvas element into scene/world coordinates.
-// PIXI hit-testing is deliberately not relied upon for point picking (layer
-// eventMode/interactiveChildren behavior differs across Foundry/PIXI builds and
-// has proven unreliable), so we do the transform ourselves:
-// client px -> canvas bitmap px -> stage-local (world) via the stage transform.
-function clientToWorld(event) {
-    try {
-        const app = canvas?.app;
-        const view = app?.view ?? app?.canvas;
-        const stage = app?.stage;
-        if (!view || !stage || typeof stage.toLocal !== "function") return null;
-        const rect = typeof view.getBoundingClientRect === "function" ? view.getBoundingClientRect() : null;
-        const viewW = view.width || rect?.width || 1;
-        const viewH = view.height || rect?.height || 1;
-        const left = rect?.left ?? 0;
-        const top = rect?.top ?? 0;
-        const rectW = rect?.width || viewW;
-        const rectH = rect?.height || viewH;
-        const sx = ((event.clientX - left) * viewW) / rectW;
-        const sy = ((event.clientY - top) * viewH) / rectH;
-        const p = stage.toLocal({ x: sx, y: sy });
-        if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) return { x: p.x, y: p.y };
-    } catch (err) {
-        // fall through
+/**
+ * Projects the tokenMap into the scene "routes" flag consumed by RoutesLayer:
+ * one entry per token with plotted points, dash style and color. Written by
+ * TokenPatrollerManager._syncRoutesFlag() after every point mutation.
+ */
+export function routesFromTokenMap(tokenMap) {
+    const routes = {};
+    for (const [tokenId, data] of Object.entries(tokenMap ?? {})) {
+        const plots = data?.plots;
+        if (!plots || plots.length == 0) continue;
+        routes[tokenId] = {
+            points: foundry.utils.duplicate(plots),
+            dash: 25,
+            gap: 25,
+            offset: 750,
+            color: data.color,
+            fb: !!data.inverted,
+            tokenId: tokenId,
+        };
     }
-    return null;
+    return routes;
 }
 
-// ---------------------------------------------------------------------------
-// DOM-level mouse interaction with the plotted patrol points.
-// A single pointerdown listener on the canvas element hit-tests every plotted
-// point (circle) and opens the edit popup / starts a drag / deletes the point.
-// This works regardless of which canvas layer is active or how PIXI dispatches
-// events, because it only needs the DOM event + the stage transform.
-// ---------------------------------------------------------------------------
-
-// True when the token's footprint covers the world point: prefer the placeable's
-// world-space bounds, fall back to its document rectangle in grid cells.
-function tokenContainsPoint(token, world, g) {
-    const bounds = token.bounds;
-    if (bounds && typeof bounds.contains === "function") return bounds.contains(world.x, world.y);
-    const doc = token.document ?? token;
-    const x0 = doc.x ?? 0;
-    const y0 = doc.y ?? 0;
-    return (
-        world.x >= x0 && world.x <= x0 + (doc.width ?? 1) * g &&
-        world.y >= y0 && world.y <= y0 + (doc.height ?? 1) * g
-    );
-}
-
-// Returns the token (if any) under the given world point. A press that lands on a
-// token belongs to Foundry's token layer (select / drag / context menu), so the
-// patrol-point handler must leave it alone.
-function tokenAtWorldPoint(world) {
-    const tokenLayer = canvas?.tokens;
-    if (!tokenLayer) return null;
-    // Foundry's own hover tracking already respects token visibility and layer
-    // interactivity.
-    if (tokenLayer.hover) return tokenLayer.hover;
-    // Geometric fallback for a pointerdown that happens before any pointermove at
-    // this spot (e.g. the token was moved under a stationary cursor). Only applies
-    // while the token layer is the active layer, so other tools can still reach
-    // points that happen to sit under a token.
-    if (canvas?.activeLayer !== tokenLayer && tokenLayer.active !== true) return null;
-    const g = gridSize();
-    const placeables = tokenLayer.placeables ?? tokenLayer.objects?.children ?? [];
-    return placeables.find((token) => token && token.visible !== false && tokenContainsPoint(token, world, g)) ?? null;
-}
-
-let boundView = null;
-
-/** Binds the canvas pointerdown handler (idempotent; re-binds if the canvas element was recreated). */
-export function registerCanvasPointInteraction() {
-    const view = canvas?.app?.view ?? canvas?.app?.canvas;
-    if (!view || typeof view.addEventListener !== "function") return;
-    if (boundView === view) return;
-    if (boundView) boundView.removeEventListener("pointerdown", onCanvasPointerDown);
-    boundView = view;
-    view.addEventListener("pointerdown", onCanvasPointerDown);
-}
-
-function onCanvasPointerDown(event) {
-    if (!game.user?.isGM) return;
-    if (event.button !== 0 && event.button !== 2) return;
-    const world = eventGlobal(event) ?? clientToWorld(event);
-    if (!world) return;
-    // A press on a token is a token interaction (select / drag / context menu).
-    // Never let it also select, drag, or delete a patrol point under the token.
-    if (tokenAtWorldPoint(world)) return;
-    const layer = routesLayer();
-    if (layer) {
-        for (const drawing of layer._drawings) {
-            const hit = drawing.hitTestMarker(world.x, world.y);
-            if (!hit) continue;
-            if (event.button === 2) {
-                // right-click: delete the point immediately
-                layer.clearAllSelections();
-                TP.tokenPatroller?.removePlotPoint(drawing.tokenId, hit.index);
-            } else {
-                // left-click: select the point (ring + options popup) and arm a potential drag
-                drawing.beginMarkerDrag(hit.index, {
-                    clientX: event.clientX,
-                    clientY: event.clientY,
-                    global: world,
-                    button: event.button,
-                });
-            }
-            return;
-        }
-    }
-    // clicked empty space: drop the current selection and close the popup
-    if (layer) layer.clearAllSelections();
-    else closePointMenu();
-}
-
+/**
+ * Custom canvas layer that renders every token's plotted patrol route (GM only).
+ * _draw() rebuilds all children from the "routes" flag on every redraw, so any
+ * selection state has to be re-applied afterwards (_restoreSelection()).
+ * Mouse interaction with the points does NOT go through this layer — it is
+ * DOM-level, see point-interaction.js.
+ */
 export class RoutesLayer extends CanvasLayer {
     constructor() {
         super();
@@ -146,7 +53,7 @@ export class RoutesLayer extends CanvasLayer {
         this.removeChildren().forEach((child) => child.destroy({ children: true }));
         this.visible = game.user.isGM;
         this.objects = this.addChild(new PIXI.Container());
-        const routes = canvas.scene?.getFlag(MODULE, "routes") ?? {};
+        const routes = canvas.scene?.getFlag(MODULE, FLAGS.ROUTES) ?? {};
         for (const data of Object.values(routes)) {
             const drawing = new RouteDrawing(data, this);
             this._drawings.push(drawing);
@@ -196,9 +103,9 @@ export class RoutesLayer extends CanvasLayer {
 /**
  * Draws the animated dashed line that visualizes a single token's patrol route,
  * plus a marker circle at every plotted point. Clicking a point circle (handled
- * at the DOM level, see registerCanvasPointInteraction) selects it (options popup:
- * delete / move), dragging moves it, right-click deletes it. Drawing supports both
- * PIXI v8 (fill()/stroke()) and v7 (lineStyle()/beginFill()) styling APIs.
+ * at the DOM level, see point-interaction.js) selects it (options popup: delete /
+ * move), dragging moves it, right-click deletes it. Drawing supports both PIXI v8
+ * (fill()/stroke()) and v7 (lineStyle()/beginFill()) styling APIs via pixi-compat.js.
  */
 class RouteDrawing {
     constructor(data, layer) {
@@ -235,7 +142,7 @@ class RouteDrawing {
     }
 
     // Distance-based hit test of the plotted points (scene coordinates), used by
-    // the DOM-level pointer handler in onCanvasPointerDown.
+    // the DOM-level pointer handler in point-interaction.js.
     hitTestMarker(gx, gy) {
         const half = gridSize() / 2;
         for (let index = 0; index < this.points.length; index++) {
@@ -269,13 +176,7 @@ class RouteDrawing {
         if (!s) return;
         s.clear();
         const radius = this._markerRadius + 4;
-        if (typeof s.stroke === "function") {
-            this._addCirclePath(s, cx, cy, radius);
-            s.stroke({ width: 3, color: 0xffffff, alpha: 1 });
-        } else {
-            if (typeof s.lineStyle === "function") s.lineStyle(3, 0xffffff, 1);
-            this._addCirclePath(s, cx, cy, radius);
-        }
+        strokePath(s, { width: 3, color: 0xffffff, alpha: 1 }, () => addCirclePath(s, cx, cy, radius));
     }
 
     // pointerdown on a point circle (from the DOM handler): select it and start a
@@ -344,40 +245,12 @@ class RouteDrawing {
         return { x, y };
     }
 
-    // Draws one marker dot. PIXI v8 styles a built path afterwards via fill()/stroke(),
-    // while PIXI v7 styles before drawing via lineStyle()/beginFill()/endFill(), so support both.
+    // Draws one marker dot (PIXI v8 and v7 styling handled by pixi-compat.js).
     _drawMarkerDot(marker, cx, cy, radius) {
-        if (typeof marker.fill === "function" && typeof marker.stroke === "function") {
-            this._addCirclePath(marker, cx, cy, radius);
-            marker.fill({ color: this.color, alpha: 0.9 });
-            marker.stroke({ width: 2, color: 0xffffff, alpha: 0.8 });
-        } else {
-            if (typeof marker.lineStyle === "function") marker.lineStyle(2, 0xffffff, 0.8);
-            if (typeof marker.beginFill === "function") marker.beginFill(this.color, 0.9);
-            this._addCirclePath(marker, cx, cy, radius);
-            if (typeof marker.endFill === "function") marker.endFill();
-        }
-    }
-
-    // Adds a circle to the current path using whichever shape API the PIXI build provides:
-    // v8 circle()/drawShape(), v7 drawCircle(), or arc(), and finally a line-segment path.
-    _addCirclePath(graphics, cx, cy, radius) {
-        if (typeof graphics.circle === "function") {
-            graphics.circle(cx, cy, radius);
-        } else if (typeof graphics.drawShape === "function") {
-            graphics.drawShape(new PIXI.Circle(cx, cy, radius));
-        } else if (typeof graphics.drawCircle === "function") {
-            graphics.drawCircle(cx, cy, radius);
-        } else if (typeof graphics.arc === "function") {
-            graphics.arc(cx, cy, radius, 0, Math.PI * 2);
-        } else {
-            const segments = 32;
-            graphics.moveTo(cx + radius, cy);
-            for (let i = 1; i <= segments; i++) {
-                const angle = (i / segments) * Math.PI * 2;
-                graphics.lineTo(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
-            }
-        }
+        drawStyledCircle(marker, cx, cy, radius, {
+            fill: { color: this.color, alpha: 0.9 },
+            stroke: { width: 2, color: 0xffffff, alpha: 0.8 },
+        });
     }
 
     _drawDashedLine(offset) {
@@ -435,15 +308,8 @@ class RouteDrawing {
     _render() {
         this.graphics.clear();
         const phase = ((Date.now() % this.offset) + 1) / this.offset;
-        if (typeof this.graphics.stroke === "function") {
-            // PIXI v8: build the path first, then stroke it
-            this._drawDashedLine(phase);
-            this.graphics.stroke({ width: 5, color: this.color, alpha: 0.7 });
-        } else {
-            // PIXI v7: lineStyle must be set before the path is drawn
-            if (typeof this.graphics.lineStyle === "function") this.graphics.lineStyle(5, this.color, 0.7);
-            this._drawDashedLine(phase);
-        }
+        // v8 strokes the built path afterwards; v7 needs lineStyle before the path.
+        strokePath(this.graphics, { width: 5, color: this.color, alpha: 0.7 }, () => this._drawDashedLine(phase));
     }
 
     _animate() {

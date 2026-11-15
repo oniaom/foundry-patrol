@@ -6,19 +6,19 @@
 ## Big picture
 
 ```
-scene flags (persistent storage)
+scene flags (persistent storage — key names owned by FLAGS in store.js)
    │  "patrols"  ── source of truth: PatrolDataManager (store.js) ↔ TokenPatrollerManager.tokenMap
    │  "routes"   ── render cache of plotted points, written by TokenPatrollerManager._syncRoutesFlag()
    ▼
 RoutesLayer (custom canvas layer, CONFIG.Canvas.layers.patrolRoutes, group "primary")
-   │  _draw() reads the "routes" flag → one RouteDrawing per token
+   │  _draw() reads the "routes" flag → one RouteDrawing per token (routes-layer.js)
    ▼
 RouteDrawing: animated dashed Graphics line + one marker circle Graphics per point
    ▲
    │  mouse input does NOT go through PIXI — it is DOM-level:
-canvas element pointerdown → registerCanvasPointInteraction() (routes-layer.js)
+canvas element pointerdown → registerCanvasPointInteraction() (point-interaction.js)
    │  (dropped when the press lands on a token — tokenAtWorldPoint)
-   │  clientToWorld() via stage.toLocal → RouteDrawing.hitTestMarker() →
+   │  clientToWorld() (coords.js, via stage.toLocal) → RouteDrawing.hitTestMarker() →
    │  left: select (ring + popup) + arm drag · drag: move + snap + movePlotPoint() on release
    │  right: removePlotPoint() · empty click / Escape: clear selection
    ▼
@@ -32,62 +32,77 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
   Handlebars helpers, the custom canvas layer
   (`CONFIG.Canvas.layers.patrolRoutes = { layerClass: RoutesLayer, group: "primary" }`),
   and `Hooks.on("canvasReady", registerCanvasPointInteraction)` — the DOM-level
-  point-picking listener (re-bound on every canvas (re)draw; idempotent).
+  point-picking listener from `point-interaction.js` (re-bound on every canvas
+  (re)draw; idempotent).
 - `Hooks.once("ready")`: creates `TP.patrolDataManager`, and for GMs
   `TP.tokenPatroller`, `TP.visionHandler`, `TP.audioHandler`, `TP.speechHandler`.
 - Hooks: `renderTokenHUD` → `TokenHud.HUD` (hud.js); `controlToken` →
   `livePlotUpdate(token.id)` on select, redraw on deselect; `deleteToken` /
   `preDeleteAmbientSound` → cleanup in patroller.
 
-## Data model and persistence — `store.js`, `patroller.js`
+## Data model and persistence — `store.js`, `schema.js`, `patroller.js`
 
-- `PatrolDataManager` stores the whole `tokenMap` in the scene flag `patrols`
-  (`dataInit()` / `saveMap()`).
-- `TokenPatrollerManager.tokenMap[tokenId]` is the per-token schema (`_defaultSchema()`):
-  `plots` (array of `{x,y}` top-left of grid cell), `linearPath`, `countinousRoutes`,
+- `PatrolDataManager` (store.js) is the single owner of the scene flags; the key
+  names live in its exported `FLAGS` (`patrols`, `routes`). It stores the whole
+  `tokenMap` (`getPatrols()` / `savePatrols()`) and the routes render cache
+  (`getRoutes()` / `saveRoutes()`).
+- The per-token schema is `createDefaultPatrolData()` in `schema.js`:
+  `TokenPatrollerManager.tokenMap[tokenId]` holds `plots` (array of `{x,y}`
+  top-left of grid cell), `linearPath`, `countinousRoutes`,
   `endCountinousRoutes`, `isLinear`, `inverted`, `isWalking`, `lastPos`,
   `lastRecordedLocation`, `delayPeriod` (ms array), `color`, quotes, vision/audio
   settings, etc.
-- `_syncRoutesFlag()` copies every token's `plots` into the scene flag `routes`
+- `_syncRoutesFlag()` projects every token's `plots` into the scene flag `routes`
+  via `routesFromTokenMap()` (routes-layer.js)
   (`{ tokenId: { points, dash, gap, offset, color, fb, tokenId } }`) — this is what
   `RoutesLayer._draw()` renders. `livePlotUpdate()` = `_syncRoutesFlag()` +
   `routesLayer()?.draw()`; call it after every mutation.
-- Public point API on `TP.tokenPatroller`: `addPlotPoint(tokenId)`,
+- Public point API on `TP.tokenPatroller` (patroller.js, the facade): `addPlotPoint(tokenId)`,
   `removePlotPoint(tokenId, index)`, `movePlotPoint(tokenId, index, {x,y})`,
   `removeTokenRoute(tokenId, removeAll)`, `startPatrol(delay, tokenId)`,
-  `stopPatrol(tokenId)`. `removePlotPoint`/`movePlotPoint` also rebuild linear
-  routes (`_rebuildLinearRoutes`) when `isLinear`.
+  `stopPatrol(tokenId)`, plus the generated field getters (`getVisionChecking`,
+  `getPatrolQuotes`, ... — see the `FIELD_GETTERS` table). `removePlotPoint`/
+  `movePlotPoint` also rebuild linear routes when `isLinear`.
 
-## Patrol engine — `patroller.js`
+## Patrol engine — `patrol-engine.js` (driven by `patroller.js`)
 
-- `startPatrol` loops `_navigationCycle` → `_navigationLoop` over `plots` (or
-  `linearPath`/`countinousRoutes` when `isLinear` on square grids), sleeping
-  `delayPeriod[iterator]`, moving the token via `token.document.update({x,y})`,
-  then `speechHandler.handleSpeech`, `visionHandler.evaluateSight`, storing
-  `lastPos`. Stops when `isWalking` flips false (stopPatrol, token moved manually
-  (`_wasTokenMoved`), combat pause, etc.).
-- `linearWalk(generateEnd, tokenId)` + `_generateLinearRoute` fill the grid cells
-  between plot points for Linear Walk mode; `_generateLinearPath` concatenates.
+- `TokenPatrollerManager` owns `tokenMap` and creates one `PatrolEngine`, injecting
+  `getData`/`hasData`/`persist` accessors so the engine never touches storage itself.
+- `startPatrol` parses the delay string (`delay.js` → `_handleDelayPeriod`), then
+  `PatrolEngine.start(token)` loops `_navigationCycle` → `_navigationLoop` over
+  `plots` (or `linearPath`/`countinousRoutes` when `isLinear` on square grids),
+  sleeping `delayPeriod[iterator]`, moving the token via
+  `token.document.update({x,y})`, then `speechHandler.handleSpeech`,
+  `visionHandler.evaluateSight`, storing `lastPos`. Stops when `isWalking` flips
+  false (stopPatrol, token moved manually (`_wasTokenMoved`), combat pause, etc.).
+- `linearWalk(generateEnd, tokenId)` in patroller.js drives the pure grid-path
+  functions in `linear-routes.js` (`generateLinearRoute`, `rebuildLinearPaths`,
+  `segmentCount`) to fill the grid cells between plot points for Linear Walk mode.
 
-## Rendering and mouse interaction — `routes-layer.js`, `controls.js`, `util.js`
+## Rendering and mouse interaction — `routes-layer.js`, `point-interaction.js`, `coords.js`, `pixi-compat.js`, `controls.js`, `util.js`
 
 - `RoutesLayer extends CanvasLayer` (v13: `foundry.canvas.layers.CanvasLayer`).
-  `_draw()` clears and rebuilds `this.objects` from the `routes` flag, creating one
-  `RouteDrawing` per token, then calls `_restoreSelection()`. GM-only visibility.
+  `_draw()` clears and rebuilds `this.objects` from the `routes` flag (key from
+  `FLAGS` in store.js), creating one `RouteDrawing` per token, then calls
+  `_restoreSelection()`. GM-only visibility. `routesFromTokenMap()` (same file)
+  builds the flag value from the tokenMap.
 - `RouteDrawing` owns `graphics` (animated dashed line, `_render`/`_animate` via
   requestAnimationFrame) and `markers` (one circle Graphics per point +
-  `selection` ring Graphics). **Markers carry no PIXI event handlers on purpose.**
+  `selection` ring Graphics). All PIXI v7/v8 API differences are encapsulated in
+  `pixi-compat.js` (`addCirclePath`, `strokePath`, `drawStyledCircle`).
+  **Markers carry no PIXI event handlers on purpose.**
 - Point picking is DOM-level (this is the load-bearing design decision — see
-  AGENTS.md gotchas): `registerCanvasPointInteraction()` binds one `pointerdown`
-  listener on `canvas.app.view`; `onCanvasPointerDown` converts the event with
-  `clientToWorld()` (bounding rect → canvas bitmap px → `stage.toLocal`) and runs
-  `drawing.hitTestMarker(world.x, world.y)` (distance ≤ markerRadius+6 around the
-  point center at `point + grid/2`). Before hit-testing, the event is dropped when
-  `tokenAtWorldPoint(world)` finds a token under the pointer — `canvas.tokens.hover`
-  first, else a geometric check (`token.bounds.contains`, falling back to the token
-  document's grid-cell rectangle) while the token layer is the active layer. A press
-  on a token belongs to Foundry's token layer, so a point under the token is never
-  selected, dragged, or deleted (otherwise dragging a token on a point drags the point).
+  AGENTS.md gotchas): `registerCanvasPointInteraction()` (point-interaction.js)
+  binds one `pointerdown` listener on `canvas.app.view`; `onCanvasPointerDown`
+  converts the event with `clientToWorld()` (coords.js: bounding rect → canvas
+  bitmap px → `stage.toLocal`) and runs `drawing.hitTestMarker(world.x, world.y)`
+  (distance ≤ markerRadius+6 around the point center at `point + grid/2`). Before
+  hit-testing, the event is dropped when `tokenAtWorldPoint(world)` finds a token
+  under the pointer — `canvas.tokens.hover` first, else a geometric check
+  (`token.bounds.contains`, falling back to the token document's grid-cell
+  rectangle) while the token layer is the active layer. A press on a token belongs
+  to Foundry's token layer, so a point under the token is never selected, dragged,
+  or deleted (otherwise dragging a token on a point drags the point).
   - left button → `beginMarkerDrag(index, normalizedEvent)`: selects
     (`_selectPoint` → white ring + `showPointMenu` at client coords) and arms a
     drag via window `pointermove`/`pointerup`/`pointercancel`; `_dragMarkerMove`
@@ -97,13 +112,16 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
   - right button → `removePlotPoint(tokenId, index)`.
   - no hit → `clearAllSelections()` (clears rings + closes popup). Escape does the
     same via `controls.js`.
-- `controls.js` also holds `patrolToolState = { selected: {tokenId, index} | null }`
-  and the popup DOM (`showPointMenu`: **Delete point** → `removePlotPoint`,
-  **Move point** → closes popup so you can drag; hint line). Popup closes on
-  outside pointerdown or Escape.
-- `util.js`: `gridSize()` (`canvas.grid.sizeX ?? size ?? 50`) and `routesLayer()`
-  (v13: find `instanceof RoutesLayer` in the `canvas.layers` **array**; fallbacks
-  `canvas.patrolRoutes` / `canvas.primary.patrolRoutes`).
+- `controls.js` also holds `patrolToolState = { selected: {tokenId, index} | null }`,
+  the popup DOM (`showPointMenu`: **Delete point** → `removePlotPoint`,
+  **Move point** → closes popup so you can drag; hint line) and the delete-route
+  confirmation dialog (`showDeleteRouteDialog`, used by the HUD trash button).
+  Popup closes on outside pointerdown or Escape.
+- `util.js`: `gridSize()` (`canvas.grid.sizeX ?? size ?? 50`), `isSquareGrid()`,
+  `sleep(ms)`, and `routesLayer()` (v13: find `instanceof RoutesLayer` in the
+  `canvas.layers` **array**; fallbacks `canvas.patrolRoutes` /
+  `canvas.primary.patrolRoutes`). `coords.js` holds `eventClient`/`eventGlobal`/
+  `clientToWorld` shared by point-interaction.js and routes-layer.js.
 
 ## UI surfaces
 
@@ -132,41 +150,52 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
 ## Import graph (who imports whom)
 
 ```
-foundry-patrol.js ──► config, tp, store, patroller, hud, routes-layer, keys, controls(no longer), vision, speech, audio, util
-routes-layer.js ───► config, tp, util (gridSize, routesLayer), controls (patrolToolState, showPointMenu, closePointMenu)
+foundry-patrol.js ──► config, tp, store, patroller, hud, routes-layer, point-interaction, keys, vision, speech, audio, util
+patroller.js ──────► tp, util, schema, delay, linear-routes, patrol-engine, routes-layer (routesFromTokenMap), controls (dialog)
+patrol-engine.js ──► config, tp, util
+linear-routes.js ──► (leaf, no module imports)
+delay.js ──────────► (leaf)
+schema.js ─────────► (leaf)
+coords.js ─────────► (leaf)
+pixi-compat.js ────► (leaf, uses global PIXI)
+routes-layer.js ───► config, tp, store (FLAGS), util (gridSize), coords, controls, pixi-compat
+point-interaction.js ► tp, util, coords, controls (closePointMenu)
 controls.js ───────► tp, util (routesLayer)
-patroller.js ──────► config, tp, util
 util.js ───────────► routes-layer (RoutesLayer, for instanceof)   ← circular with routes-layer.js, safe: only used inside functions
-hud.js ────────────► config, tp, menu
-menu.js ───────────► config, tp
+hud.js ────────────► config, tp, menu, util
+menu.js ───────────► config, tp, util, delay
 keys.js ───────────► config, tp
-vision/speech/audio ► config|tp, util
+vision.js ─────────► tp, util
+speech.js ─────────► config, tp
+audio.js ──────────► config, tp, util
 store.js ──────────► config
 ```
 
-The `routes-layer.js ↔ controls.js/util.js` cycle is fine because all cross-calls
-happen at runtime inside functions, never at module-evaluation time. Don't add
-top-level side effects to these modules.
+The `util.js ↔ routes-layer.js` cycle is fine because the cross-call happens at
+runtime inside a function, never at module-evaluation time. Don't add top-level
+side effects to these modules.
 
 ## Common flows (function connection map)
 
 - **Add a point:** HUD button / keybind → `TokenPatrollerManager.addPlotPoint` →
-  `updateTokenRoute` (push to `plots`) → `livePlotUpdate` + `linearWalk` → layer redraw.
-- **Click a point:** canvas `pointerdown` → `onCanvasPointerDown` → `clientToWorld` →
-  `RouteDrawing.hitTestMarker` → `beginMarkerDrag` → `_selectPoint` → `showPointMenu`.
+  `updateTokenRoute` (push to `plots`) → `livePlotUpdate` + `linearWalk` (linear-routes.js) → layer redraw.
+- **Click a point:** canvas `pointerdown` → `onCanvasPointerDown` (point-interaction.js)
+  → `clientToWorld` (coords.js) → `RouteDrawing.hitTestMarker` → `beginMarkerDrag`
+  → `_selectPoint` → `showPointMenu`.
 - **Move a point:** same pointerdown → window `pointermove` → `_dragMarkerMove`
   (snap, redraw) → `pointerup` → `_dragMarkerEnd` → `movePlotPoint` →
   `_saveAndUpdate` + `livePlotUpdate` → redraw (selection re-applied by `_restoreSelection`).
-- **Delete a point:** right-click → `removePlotPoint`, or popup button → same.
-- **Start patrol:** HUD/keybind/macro → `startPatrol` → `_navigationCycle/_navigationLoop`
-  → per point: delay sleep, `token.document.update`, speech/vision/audio, `lastPos`.
+- **Delete a point:** right-click → `removePlotPoint`, or popup button / HUD dialog → same.
+- **Start patrol:** HUD/keybind/macro → `startPatrol` → `_handleDelayPeriod` (delay.js)
+  → `PatrolEngine.start` → `_navigationCycle/_navigationLoop` → per point: delay
+  sleep, `token.document.update`, speech/vision/audio, `lastPos`.
 
 ## Gotchas (details in AGENTS.md)
 
 - v13 `canvas.layers` is an array — use `routesLayer()`.
 - PIXI v8 eventMode semantics make PIXI-layer hit-testing unreliable — point picking
-  is DOM-level in `routes-layer.js`; keep it that way.
+  is DOM-level in `point-interaction.js`; keep it that way.
 - v8 Graphics: build path first, then `fill()/stroke()`; v7: `lineStyle()/beginFill()`
-  first — helpers in `RouteDrawing` handle both.
+  first — helpers in `pixi-compat.js` handle both.
 - Layer `_draw()` destroys and recreates all children on every redraw; re-apply
   selection state there.

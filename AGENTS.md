@@ -18,8 +18,9 @@ modules under `module/`, entry point `module/foundry-patrol.js` (see `module.jso
 1. This file.
 2. `ARCHITECTURE.md` — how the codebase works and which files/functions connect.
 3. `module/foundry-patrol.js` — entry point, hooks, layer registration.
-4. `module/routes-layer.js` — rendering of routes + **all mouse interaction with points**.
-5. `module/patroller.js` — the patrol engine and the per-token data schema.
+4. `module/routes-layer.js` — rendering of routes (layer + per-token drawing).
+5. `module/point-interaction.js` — **all mouse interaction with points** (DOM-level picking).
+6. `module/patroller.js` + `module/patrol-engine.js` — the public API/facade and the patrol loop.
 
 ## Repo layout
 
@@ -27,13 +28,20 @@ modules under `module/`, entry point `module/foundry-patrol.js` (see `module.jso
 module.json            manifest (id, version, compatibility 13/14, esmodules entry)
 module/
   foundry-patrol.js    entry point: settings, hooks, CONFIG.Canvas.layers registration
-  config.js            MODULE id + world/client settings definitions
+  config.js            MODULE id + world/client settings definitions (data-driven table)
   tp.js                the global TP object all modules share (assigned in entry point)
-  util.js              gridSize(), routesLayer() lookup helpers
-  store.js             PatrolDataManager — persists everything in scene flags
-  patroller.js         TokenPatrollerManager — tokenMap, plot points, patrol loop, API
-  routes-layer.js      RoutesLayer (custom canvas layer) + RouteDrawing + point picking
-  controls.js          patrol-point popup menu (showPointMenu/closePointMenu) + selection state
+  util.js              gridSize(), isSquareGrid(), sleep(), routesLayer() lookup helpers
+  store.js             PatrolDataManager — the ONLY module touching scene flags (FLAGS keys)
+  schema.js            default per-token patrol data schema (createDefaultPatrolData)
+  delay.js             delay string <-> milliseconds parsing/formatting (delayPeriod)
+  linear-routes.js     grid-path math for Linear Walk mode (pure functions)
+  patroller.js         TokenPatrollerManager — tokenMap + plot/route CRUD + public API facade
+  patrol-engine.js     PatrolEngine — the walking loop only (data via injected accessors)
+  routes-layer.js      RoutesLayer (custom canvas layer) + RouteDrawing + routes flag projection
+  point-interaction.js DOM-level point picking on the canvas element (registerCanvasPointInteraction)
+  coords.js            event/PIXI coordinate normalization + clientToWorld conversion
+  pixi-compat.js       PIXI v7/v8 Graphics helpers (circle path, fill/stroke ordering)
+  controls.js          selection state + point popup menu + delete-route dialog
   hud.js               token HUD buttons (add point, delete, start/stop, linear, menu)
   menu.js              PatrolMenu FormApplication (templates/patrol_menu.html)
   keys.js              GM keybindings (start/stop/add/clear/macro)
@@ -55,20 +63,21 @@ ARCHITECTURE.md      codebase map — read with this file, keep in sync
   reliably here (depends on layer `eventMode`/`interactiveChildren`/active layer —
   v13 `CanvasLayer` defaults `interactiveChildren = false`, and PIXI v8 prunes
   `passive` + `!interactiveChildren` subtrees). Point picking is **DOM-level**:
-  `registerCanvasPointInteraction()` in `routes-layer.js` listens on the canvas
-  element and converts client→world coords via `stage.toLocal`. Keep it that way.
+  `registerCanvasPointInteraction()` in `point-interaction.js` listens on the
+  canvas element and converts client→world coords via `coords.js` (`clientToWorld`,
+  `stage.toLocal`). Keep it that way.
 - **Point picking must never hijack a press on a token.** `onCanvasPointerDown`
-  in `routes-layer.js` drops the event when `tokenAtWorldPoint(world)` finds a
-  token under the pointer (`canvas.tokens.hover` first, then a bounds/document
+  in `point-interaction.js` drops the event when `tokenAtWorldPoint(world)` finds
+  a token under the pointer (`canvas.tokens.hover` first, then a bounds/document
   rectangle check while the token layer is active). Without this, dragging a
   token on top of a point selects and drags the point too. Keep this guard.
 - PIXI v8 events: `event.global` / `event.client` are direct; `event.data` is a
   deprecated getter returning the event itself. Graphics styling: v8 `fill()/stroke()`
   after building the path; the code supports both v8 and v7 APIs — keep it that way.
-- All persistent data lives in **scene flags**: `patrols` (source of truth,
-  `PatrolDataManager`) and `routes` (render cache synced by
-  `TokenPatrollerManager._syncRoutesFlag`). Never add new storage without updating
-  `ARCHITECTURE.md`.
+- All persistent data lives in **scene flags** (key names owned by `FLAGS` in
+  `store.js`): `patrols` (source of truth, `PatrolDataManager`) and `routes`
+  (render cache synced by `TokenPatrollerManager._syncRoutesFlag`). Never add new
+  storage without updating `ARCHITECTURE.md`.
 - Route rendering is **GM-only** (`RoutesLayer._draw` sets `visible = game.user.isGM`).
 - After any mutation of plot points call `livePlotUpdate()` (syncs the `routes` flag
   and redraws the layer). The layer's `_draw()` recreates all children, so any
@@ -95,12 +104,15 @@ ARCHITECTURE.md      codebase map — read with this file, keep in sync
 
 | Task | Files |
 | --- | --- |
-| Change point rendering / click / drag / delete interaction | `module/routes-layer.js`, `module/controls.js` |
-| Change patrol walking logic, delays, linear walk | `module/patroller.js` |
-| Change data storage / flags | `module/store.js`, `patroller.js` (`_syncRoutesFlag`, `livePlotUpdate`) |
+| Change point rendering | `module/routes-layer.js`, `module/pixi-compat.js` |
+| Change click / drag / delete interaction with points | `module/point-interaction.js`, `module/routes-layer.js`, `module/controls.js`, `module/coords.js` |
+| Change patrol walking logic | `module/patrol-engine.js`, `module/patroller.js` (facade) |
+| Change delays (parse/format) | `module/delay.js` |
+| Change linear walk math | `module/linear-routes.js` |
+| Change data storage / flags / schema | `module/store.js`, `module/schema.js`, `patroller.js` (`_syncRoutesFlag`, `livePlotUpdate`) |
 | Token HUD buttons | `module/hud.js` |
 | Patrol Menu form | `module/menu.js`, `templates/patrol_menu.html`, `css/foundry-menu.scss` |
 | Keybindings | `module/keys.js` |
 | Vision/speech/audio reactions | `module/vision.js`, `module/speech.js`, `module/audio.js` |
-| Layer registration / hooks | `module/foundry-patrol.js`, `module/util.js` |
+| Layer registration / hooks / canvas lookups | `module/foundry-patrol.js`, `module/util.js` |
 | User-facing behavior docs | `README.md` |

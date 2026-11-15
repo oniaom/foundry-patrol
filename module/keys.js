@@ -1,22 +1,23 @@
 import { MODULE } from "./config.js";
 import { TP } from "./tp.js";
 
+/** Tokens the keybindings act on: controlled tokens, else all owned tokens. */
 function affectedTokens() {
     const controlled = canvas.tokens.controlled;
     return controlled.length > 0 ? controlled : canvas.tokens.placeables.filter((t) => t.isOwner);
 }
 
+function forEachAffectedToken(fn) {
+    for (const token of affectedTokens()) fn(token);
+}
+
 function startAllRoutes() {
-    for (const token of affectedTokens()) {
-        TP.tokenPatroller?.startPatrol(undefined, token.id);
-    }
+    forEachAffectedToken((token) => TP.tokenPatroller?.startPatrol(undefined, token.id));
     ui.notifications.info("Routes started for this scene");
 }
 
 function haltAllRoutes() {
-    for (const token of affectedTokens()) {
-        TP.tokenPatroller?._disableWalking(token);
-    }
+    forEachAffectedToken((token) => TP.tokenPatroller?._disableWalking(token));
     ui.notifications.info("Routes halted for this scene");
 }
 
@@ -27,9 +28,7 @@ function addPlotSelectedToken() {
 }
 
 function clearAllRoutes() {
-    for (const token of affectedTokens()) {
-        TP.tokenPatroller?.removeTokenRoute(token.id, true);
-    }
+    forEachAffectedToken((token) => TP.tokenPatroller?.removeTokenRoute(token.id, true));
     ui.notifications.info("Routes cleared for this scene");
 }
 
@@ -57,15 +56,17 @@ async function generateMacro() {
     return macro;
 }
 
+// [setting key, name, hint, default key, onDown handler]
+const KEYBINDINGS = [
+    ["startRoute", "Start Routes", "Start all patrol routes on this scene (selected tokens, or all owned tokens).", "KeyG", startAllRoutes],
+    ["stopRoute", "Stop Routes", "Halt all patrol routes on this scene.", "KeyH", haltAllRoutes],
+    ["addTokenPoint", "Add Plot Point", "Add the current position of each selected token as a patrol point.", "KeyR", addPlotSelectedToken],
+    ["clearRoute", "Clear Routes", "Clear the patrol routes of the selected (or all owned) tokens.", "KeyD", clearAllRoutes],
+    ["generateMacro", "Generate Patrol Macro", "Create a macro that starts the patrols of the selected tokens.", "KeyM", generateMacro],
+];
+
 export function registerKeybindings() {
-    const bindings = [
-        ["startRoute", "Start Routes", "Start all patrol routes on this scene (selected tokens, or all owned tokens).", "KeyG", startAllRoutes],
-        ["stopRoute", "Stop Routes", "Halt all patrol routes on this scene.", "KeyH", haltAllRoutes],
-        ["addTokenPoint", "Add Plot Point", "Add the current position of each selected token as a patrol point.", "KeyR", addPlotSelectedToken],
-        ["clearRoute", "Clear Routes", "Clear the patrol routes of the selected (or all owned) tokens.", "KeyD", clearAllRoutes],
-        ["generateMacro", "Generate Patrol Macro", "Create a macro that starts the patrols of the selected tokens.", "KeyM", generateMacro],
-    ];
-    for (const [key, name, hint, code, onDown] of bindings) {
+    for (const [key, name, hint, code, onDown] of KEYBINDINGS) {
         game.keybindings.register(MODULE, key, {
             name: name,
             hint: hint,

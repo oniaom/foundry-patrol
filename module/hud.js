@@ -1,6 +1,51 @@
 import { MODULE } from "./config.js";
 import { TP } from "./tp.js";
 import { PatrolMenu } from "./menu.js";
+import { isSquareGrid } from "./util.js";
+
+/** Builds one HUD control icon (a div.control-icon wrapping an img/i element). */
+function makeIconButton(innerHtml, title) {
+    const el = document.createElement("div");
+    el.classList.add("control-icon");
+    el.style.marginLeft = "4px";
+    el.innerHTML = innerHtml;
+    const img = el.querySelector("img, i");
+    if (img && title) img.title = title;
+    return el;
+}
+
+/** Builds a flex row container holding a group of HUD buttons. */
+function makeButtonRow(className, ...children) {
+    const row = document.createElement("div");
+    row.classList.add(className);
+    Object.assign(row.style, {
+        display: "flex",
+        flexDirection: "row",
+        justifyContent: "center",
+        alignItems: "center",
+        marginRight: "75px",
+    });
+    row.append(...children);
+    return row;
+}
+
+/**
+ * Flips a HUD toggle button between its active/inactive look: swaps the icon
+ * classes (and the img src for image icons) and updates the button title.
+ * @returns {boolean} the NEW state of `activeClass` on the icon.
+ */
+function flipIconToggle(ev, { activeClass, inactiveClass, activeSrc, inactiveSrc, activeTitle, inactiveTitle }) {
+    const button = ev.currentTarget;
+    const icon = button.querySelector("img, i");
+    const wasActive = icon.classList.contains(activeClass);
+    if (activeSrc && inactiveSrc) icon.src = wasActive ? inactiveSrc : activeSrc;
+    icon.classList.toggle(activeClass, !wasActive);
+    icon.classList.toggle(inactiveClass, wasActive);
+    if (activeTitle !== undefined && inactiveTitle !== undefined) {
+        button.title = wasActive ? inactiveTitle : activeTitle;
+    }
+    return !wasActive;
+}
 
 export class TokenHud {
     static async HUD(token, html, data) {
@@ -8,7 +53,7 @@ export class TokenHud {
         if (!root || !token) return;
 
         const tokenId = token.id;
-        const tokenMap = (await TP.patrolDataManager?.getMap()) ?? {};
+        const tokenMap = (await TP.patrolDataManager?.getPatrols()) ?? {};
         const patrolData = tokenMap[tokenId];
         let isPatrolling = false;
         let isLinear = false;
@@ -26,27 +71,19 @@ export class TokenHud {
         const right = root.querySelector(".col.right") ?? root.querySelector(".right");
         if (!left || !right) return;
 
-        const iconDiv = (inner, title) => {
-            const el = document.createElement("div");
-            el.classList.add("control-icon");
-            el.style.marginLeft = "4px";
-            el.innerHTML = inner;
-            const img = el.querySelector("img, i");
-            if (img && title) img.title = title;
-            return el;
-        };
+        const svg = (name) => `modules/${MODULE}/imgs/svg/${name}`;
 
-        const addPlotPoint = iconDiv(`<img src="modules/${MODULE}/imgs/svg/map.svg" width="36" height="36">`, "Add Point (records the token's current position)");
-        const deletePlotPoint = iconDiv(`<i class="fas fa-trash-alt"></i>`, "Delete points (all, or last)");
+        const addPlotPoint = makeIconButton(`<img src="${svg("map.svg")}" width="36" height="36">`, "Add Point (records the token's current position)");
+        const deletePlotPoint = makeIconButton(`<i class="fas fa-trash-alt"></i>`, "Delete points (all, or last)");
         const plotDirection = isInverted
-            ? iconDiv(`<i class="fas fa-arrows-alt-h"></i>`, "Forwards-Backwards Mode")
-            : iconDiv(`<i class="fas fa-recycle"></i>`, "Cycle Mode");
+            ? makeIconButton(`<i class="fas fa-arrows-alt-h"></i>`, "Forwards-Backwards Mode")
+            : makeIconButton(`<i class="fas fa-recycle"></i>`, "Cycle Mode");
         const linearWalkHUD = isLinear
-            ? iconDiv(`<img class="linear-active" src="modules/${MODULE}/imgs/svg/linear.svg" width="36" height="36">`, "Linear Walk")
-            : iconDiv(`<img class="linear-inactive" src="modules/${MODULE}/imgs/svg/line.svg" width="36" height="36">`, "Plot Walk");
+            ? makeIconButton(`<img class="linear-active" src="${svg("linear.svg")}" width="36" height="36">`, "Linear Walk")
+            : makeIconButton(`<img class="linear-inactive" src="${svg("line.svg")}" width="36" height="36">`, "Plot Walk");
         const patrolWalkHUD = isPatrolling
-            ? iconDiv(`<i class="fas fa-times"></i>`, "Stop route")
-            : iconDiv(`<i class="fas fa-walking"></i>`, "Start route");
+            ? makeIconButton(`<i class="fas fa-times"></i>`, "Stop route")
+            : makeIconButton(`<i class="fas fa-walking"></i>`, "Start route");
 
         const patrolDelayHUD = document.createElement("input");
         patrolDelayHUD.classList.add("control-icon");
@@ -56,29 +93,10 @@ export class TokenHud {
         patrolDelayHUD.value = delayPeriod;
         patrolDelayHUD.title = "Delay period";
 
-        const patrolMenu = iconDiv(`<i class="fas fa-caret-down"></i>`, "Patrol Menu");
+        const patrolMenu = makeIconButton(`<i class="fas fa-caret-down"></i>`, "Patrol Menu");
 
-        const plotDiv = document.createElement("div");
-        plotDiv.classList.add("plotDiv");
-        Object.assign(plotDiv.style, {
-            display: "flex",
-            flexDirection: "row",
-            justifyContent: "center",
-            alignItems: "center",
-            marginRight: "75px",
-        });
-        plotDiv.append(addPlotPoint, deletePlotPoint, plotDirection);
-
-        const patrolDiv = document.createElement("div");
-        patrolDiv.classList.add("patrolDiv");
-        Object.assign(patrolDiv.style, {
-            display: "flex",
-            flexDirection: "row",
-            justifyContent: "center",
-            alignItems: "center",
-            marginRight: "75px",
-        });
-        patrolDiv.append(linearWalkHUD, patrolWalkHUD, patrolDelayHUD);
+        const plotDiv = makeButtonRow("plotDiv", addPlotPoint, deletePlotPoint, plotDirection);
+        const patrolDiv = makeButtonRow("patrolDiv", linearWalkHUD, patrolWalkHUD, patrolDelayHUD);
 
         if (TP.tokenPatroller && (game.user.isGM || game.settings.get(MODULE, "enablePlayerPatrol"))) {
             if (!game.settings.get(MODULE, "disableHUD")) {
@@ -86,54 +104,57 @@ export class TokenHud {
             }
             right.append(patrolMenu);
 
-            addPlotPoint.addEventListener("click", () => {
-                TP.tokenPatroller?.addPlotPoint(tokenId);
-            });
-
-            deletePlotPoint.addEventListener("click", () => {
-                TP.tokenPatroller?.deleteProcess(tokenId);
-            });
-
-            linearWalkHUD.addEventListener("click", (ev) => {
-                if (canvas.grid.type != CONST.GRID_TYPES.SQUARE) {
-                    ui.notifications.error("Linear path can only be used on square based maps.");
-                    return;
-                }
-                const img = ev.currentTarget.querySelector("img");
-                const active = img.classList.contains("linear-active");
-                img.src = active
-                    ? `modules/${MODULE}/imgs/svg/line.svg`
-                    : `modules/${MODULE}/imgs/svg/linear.svg`;
-                img.classList.toggle("linear-active", !active);
-                img.classList.toggle("linear-inactive", active);
-                if (patrolData) TP.tokenPatroller?._setLinear(tokenId);
-            });
-
-            plotDirection.addEventListener("click", (ev) => {
-                const icon = ev.currentTarget.querySelector("i");
-                const backwards = icon.classList.contains("fa-arrows-alt-h");
-                icon.classList.toggle("fa-arrows-alt-h", !backwards);
-                icon.classList.toggle("fa-recycle", backwards);
-                ev.currentTarget.title = backwards ? "Cycle Mode" : "Forwards-Backwards Mode";
-                if (patrolData) TP.tokenPatroller?._setInverse(tokenId);
-            });
-
-            patrolWalkHUD.addEventListener("click", (ev) => {
-                const icon = ev.currentTarget.querySelector("i");
-                const starting = icon.classList.contains("fa-walking");
-                icon.classList.toggle("fa-walking", !starting);
-                icon.classList.toggle("fa-times", starting);
-                ev.currentTarget.title = starting ? "Stop route" : "Start route";
-                if (starting) {
-                    TP.tokenPatroller?.startPatrol(patrolDelayHUD.value, tokenId);
-                } else {
-                    TP.tokenPatroller?.stopPatrol(tokenId);
-                }
-            });
-
-            patrolMenu.addEventListener("click", () => {
-                new PatrolMenu(tokenId).render(true);
-            });
+            // Each HUD button and the action it triggers; bound in one loop below.
+            const actions = [
+                { el: addPlotPoint, onClick: () => TP.tokenPatroller?.addPlotPoint(tokenId) },
+                { el: deletePlotPoint, onClick: () => TP.tokenPatroller?.deleteProcess(tokenId) },
+                {
+                    el: linearWalkHUD,
+                    onClick: (ev) => {
+                        if (!isSquareGrid()) {
+                            ui.notifications.error("Linear path can only be used on square based maps.");
+                            return;
+                        }
+                        flipIconToggle(ev, {
+                            activeClass: "linear-active",
+                            inactiveClass: "linear-inactive",
+                            activeSrc: svg("linear.svg"),
+                            inactiveSrc: svg("line.svg"),
+                        });
+                        if (patrolData) TP.tokenPatroller?._setLinear(tokenId);
+                    },
+                },
+                {
+                    el: plotDirection,
+                    onClick: (ev) => {
+                        flipIconToggle(ev, {
+                            activeClass: "fa-arrows-alt-h",
+                            inactiveClass: "fa-recycle",
+                            activeTitle: "Forwards-Backwards Mode",
+                            inactiveTitle: "Cycle Mode",
+                        });
+                        if (patrolData) TP.tokenPatroller?._setInverse(tokenId);
+                    },
+                },
+                {
+                    el: patrolWalkHUD,
+                    onClick: (ev) => {
+                        const starting = flipIconToggle(ev, {
+                            activeClass: "fa-times",
+                            inactiveClass: "fa-walking",
+                            activeTitle: "Stop route",
+                            inactiveTitle: "Start route",
+                        });
+                        if (starting) {
+                            TP.tokenPatroller?.startPatrol(patrolDelayHUD.value, tokenId);
+                        } else {
+                            TP.tokenPatroller?.stopPatrol(tokenId);
+                        }
+                    },
+                },
+                { el: patrolMenu, onClick: () => new PatrolMenu(tokenId).render(true) },
+            ];
+            for (const { el, onClick } of actions) el.addEventListener("click", onClick);
         }
     }
 }
