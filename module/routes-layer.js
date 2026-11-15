@@ -1,6 +1,7 @@
 import { MODULE } from "./config.js";
 import { TP } from "./tp.js";
 import { gridSize } from "./util.js";
+import { patrolToolState, showPointMenu, closePointMenu } from "./controls.js";
 
 const CanvasLayer = foundry.canvas.layers.CanvasLayer ?? globalThis.CanvasLayer;
 
@@ -33,12 +34,19 @@ export class RoutesLayer extends CanvasLayer {
         this._drawings = [];
         this.removeChildren().forEach((child) => child.destroy({ children: true }));
     }
+
+    // Enables/disables patrol-point editing (markers become selectable/draggable).
+    setEditMode(active) {
+        for (const drawing of this._drawings) drawing.setEditMode(active);
+    }
 }
 
 /**
  * Draws the animated dashed line that visualizes a single token's patrol route,
- * plus a clickable marker at every plotted point (left-click a marker to delete
- * that point). PIXI v8 compatible (stroke()/fill() instead of the removed lineStyle()).
+ * plus a marker at every plotted point. When the Patrol Tool edit mode is active
+ * the markers are interactive: left-click selects a point (options popup), dragging
+ * moves it, right-click deletes it. Drawing supports both PIXI v8 (fill()/stroke())
+ * and v7 (lineStyle()/beginFill()) styling APIs.
  */
 class RouteDrawing {
     constructor(data) {
@@ -51,29 +59,138 @@ class RouteDrawing {
         this.tokenId = data.tokenId;
         this.graphics = new PIXI.Graphics();
         this.markers = new PIXI.Container();
+        this.selection = new PIXI.Graphics();
+        this._markerRadius = Math.max(8, gridSize() / 6);
         this.destroyed = false;
         this._drawMarkers();
+        this.markers.addChild(this.selection);
         this._animate();
     }
 
     _drawMarkers() {
         const GRID_SIZE = gridSize() / 2;
-        const radius = Math.max(8, gridSize() / 6);
+        const radius = this._markerRadius;
+        const editable = patrolToolState.active;
         this.points.forEach((point, index) => {
             const cx = point.x + GRID_SIZE;
             const cy = point.y + GRID_SIZE;
             const marker = new PIXI.Graphics();
             this._drawMarkerDot(marker, cx, cy, radius);
-            marker.eventMode = "static";
-            marker.interactive = true; // PIXI v7-style interactivity flag (no-op in v8)
+            marker.eventMode = editable ? "static" : "none";
+            marker.interactive = editable; // PIXI v7-style interactivity flag (no-op in v8)
             marker.hitArea = new PIXI.Circle(cx, cy, radius + 6);
             marker.cursor = "pointer";
             marker.on("pointerdown", (event) => {
+                if (!patrolToolState.active) return;
+                if (event.button === 2) {
+                    // right-click: quick delete
+                    TP.tokenPatroller?.removePlotPoint(this.tokenId, index);
+                    return;
+                }
                 if (event.button !== 0) return;
-                TP.tokenPatroller?.removePlotPoint(this.tokenId, index);
+                this._beginMarkerDrag(marker, index, event);
             });
             this.markers.addChild(marker);
         });
+    }
+
+    setEditMode(active) {
+        for (const child of this.markers.children) {
+            if (child === this.selection) continue;
+            child.eventMode = active ? "static" : "none";
+            child.interactive = active;
+        }
+        if (!active) this.clearSelection();
+    }
+
+    clearSelection() {
+        patrolToolState.selected = null;
+        this.selection?.clear();
+        closePointMenu();
+    }
+
+    _selectPoint(index, clientX, clientY) {
+        patrolToolState.selected = { tokenId: this.tokenId, index };
+        const half = gridSize() / 2;
+        const point = this.points[index];
+        if (point) this._drawSelection(point.x + half, point.y + half);
+        showPointMenu({ tokenId: this.tokenId, index, clientX, clientY });
+    }
+
+    // White ring drawn around the currently selected plot point.
+    _drawSelection(cx, cy) {
+        const s = this.selection;
+        if (!s) return;
+        s.clear();
+        const radius = this._markerRadius + 4;
+        if (typeof s.stroke === "function") {
+            this._addCirclePath(s, cx, cy, radius);
+            s.stroke({ width: 3, color: 0xffffff, alpha: 1 });
+        } else {
+            if (typeof s.lineStyle === "function") s.lineStyle(3, 0xffffff, 1);
+            this._addCirclePath(s, cx, cy, radius);
+        }
+    }
+
+    // pointerdown on a marker: select it and start a potential drag. A plain click
+    // leaves the selection + options menu; moving the pointer drags the point.
+    _beginMarkerDrag(marker, index, event) {
+        const startGlobal = { x: event?.data?.global?.x ?? 0, y: event?.data?.global?.y ?? 0 };
+        const startClient = { x: event?.clientX ?? 0, y: event?.clientY ?? 0 };
+        this._selectPoint(index, event?.clientX ?? 0, event?.clientY ?? 0);
+        const drag = { marker, index, startGlobal, startClient, dragging: false };
+        const onMove = (ev) => this._dragMarkerMove(drag, ev);
+        const onUp = (ev) => {
+            window.removeEventListener("pointermove", onMove);
+            window.removeEventListener("pointerup", onUp);
+            this._dragMarkerEnd(drag, ev);
+        };
+        window.addEventListener("pointermove", onMove);
+        window.addEventListener("pointerup", onUp);
+    }
+
+    _dragMarkerMove(drag, ev) {
+        if (!this.points[drag.index]) return;
+        const scale = canvas.app?.stage?.scale?.x || 1;
+        const gx = drag.startGlobal.x + ((ev.clientX ?? 0) - drag.startClient.x) / scale;
+        const gy = drag.startGlobal.y + ((ev.clientY ?? 0) - drag.startClient.y) / scale;
+        if (!drag.dragging) {
+            const dx = (ev.clientX ?? 0) - drag.startClient.x;
+            const dy = (ev.clientY ?? 0) - drag.startClient.y;
+            if (Math.sqrt(dx * dx + dy * dy) < 4) return;
+            drag.dragging = true;
+        }
+        const point = this._snapPointToGrid(gx, gy);
+        this.points[drag.index] = point;
+        const half = gridSize() / 2;
+        const cx = point.x + half;
+        const cy = point.y + half;
+        drag.marker.clear();
+        this._drawMarkerDot(drag.marker, cx, cy, this._markerRadius);
+        drag.marker.hitArea = new PIXI.Circle(cx, cy, this._markerRadius + 6);
+        this._drawSelection(cx, cy);
+        this._render();
+    }
+
+    _dragMarkerEnd(drag) {
+        if (!drag.dragging) return; // plain click: keep the selection + options menu
+        const point = this.points[drag.index];
+        if (point) TP.tokenPatroller?.movePlotPoint(this.tokenId, drag.index, { x: point.x, y: point.y });
+    }
+
+    // Converts canvas coordinates to a stored point (top-left of the grid cell),
+    // snapped to the grid unless the scene is gridless.
+    _snapPointToGrid(gx, gy) {
+        const half = gridSize() / 2;
+        let x = gx - half;
+        let y = gy - half;
+        const gridType = canvas.grid?.type;
+        if (gridType && gridType !== CONST.GRID_TYPES.GRIDLESS) {
+            const g = gridSize();
+            x = Math.round(x / g) * g;
+            y = Math.round(y / g) * g;
+        }
+        return { x, y };
     }
 
     // Draws one marker dot. PIXI v8 styles a built path afterwards via fill()/stroke(),

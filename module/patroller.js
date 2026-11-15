@@ -521,6 +521,22 @@ export class TokenPatrollerManager {
         await this.livePlotUpdate();
     }
 
+    /**
+     * Moves one plotted point to a new position (drag-and-drop in the Patrol Tool),
+     * then persists and redraws the route.
+     */
+    async movePlotPoint(tokenId, index, point) {
+        const data = this.tokenMap[tokenId];
+        if (!data || !Array.isArray(data.plots)) return;
+        if (!Number.isInteger(index) || index < 0 || index >= data.plots.length) return;
+        if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+        data.plots[index] = { x: point.x, y: point.y };
+        data.lastPos = 0;
+        if (data.isLinear) await this._rebuildLinearRoutes(tokenId);
+        await this._saveAndUpdate(this.tokenMap);
+        await this.livePlotUpdate();
+    }
+
     async _rebuildLinearRoutes(tokenId) {
         if (canvas.grid.type != CONST.GRID_TYPES.SQUARE) return;
         const plots = this._getPlotsFromId(tokenId) ?? [];

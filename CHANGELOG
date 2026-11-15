@@ -3,6 +3,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [3.2.0] - Patrol Tool scene control
+### Added:
+- New **Patrol Tool** scene control on the left toolbar (route icon, GM only) with an "Edit patrol points" toggle. While active, plotted point markers are interactive: left-click a point to select it (a small options popup offers **Delete point**), **drag** the point on the map to move it (snapped to the grid unless gridless), or right-click a point to delete it immediately. A selected point is highlighted with a white ring. While the tool is inactive, markers no longer intercept canvas clicks.
+- New API method `TP.tokenPatroller.movePlotPoint(tokenId, index, {x, y})` used by the drag-and-drop (persists the moved point, rebuilds linear routes when in linear mode, and redraws).
+
 ## [3.1.2] - Bug fix
 ### Bug Fixes:
 - Fixed worlds still failing to load with `marker.fill is not a function` after 3.1.1: the PIXI build in the affected Foundry versions also lacks the v8 chainable `fill()`/`stroke()` styling (v7-style `lineStyle()`/`beginFill()`/`endFill()` only). Marker dots and the dashed route line are now drawn through whichever API the runtime provides (`circle()`/`drawShape()`/`drawCircle()`/`arc()`/path segments, styled via `fill()`/`stroke()` or `lineStyle()`/`beginFill()`/`endFill()`), and marker interactivity sets both `eventMode` (v8) and `interactive` (v7).
