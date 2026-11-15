@@ -37,7 +37,46 @@ export class RoutesLayer extends CanvasLayer {
 
     // Enables/disables patrol-point editing (markers become selectable/draggable).
     setEditMode(active) {
+        if (active) {
+            if (this._savedEventMode === undefined) this._savedEventMode = this.eventMode;
+            this.eventMode = "static";
+            this.interactive = true;
+            this.interactiveChildren = true;
+            if (!this._editHandlerBound) {
+                this._editHandler = (event) => this._handleLayerPointerDown(event);
+                this.on("pointerdown", this._editHandler);
+                this._editHandlerBound = true;
+            }
+        } else {
+            this.eventMode = this._savedEventMode ?? "passive";
+            this.interactive = false;
+            if (this._editHandlerBound) {
+                this.off("pointerdown", this._editHandler);
+                this._editHandlerBound = false;
+            }
+        }
         for (const drawing of this._drawings) drawing.setEditMode(active);
+    }
+
+    // Layer-level hit-testing fallback: works even when per-object hit testing
+    // doesn't reach the markers in the current PIXI build. The marker handlers
+    // call stopPropagation(), so this only sees events the markers didn't consume.
+    _handleLayerPointerDown(event) {
+        if (!patrolToolState.active) return;
+        if (event.button !== 0 && event.button !== 2) return;
+        const g = event?.data?.global ?? { x: 0, y: 0 };
+        for (const drawing of this._drawings) {
+            const hit = drawing.hitTestMarker(g.x, g.y);
+            if (!hit) continue;
+            if (event.button === 2) {
+                TP.tokenPatroller?.removePlotPoint(drawing.tokenId, hit.index);
+            } else {
+                drawing.beginMarkerDrag(hit.index, event);
+            }
+            return;
+        }
+        // clicked empty space: drop the current selection
+        for (const drawing of this._drawings) drawing.clearSelection();
     }
 }
 
@@ -60,6 +99,7 @@ class RouteDrawing {
         this.graphics = new PIXI.Graphics();
         this.markers = new PIXI.Container();
         this.selection = new PIXI.Graphics();
+        this._markerEls = [];
         this._markerRadius = Math.max(8, gridSize() / 6);
         this.destroyed = false;
         this._drawMarkers();
@@ -82,25 +122,40 @@ class RouteDrawing {
             marker.cursor = "pointer";
             marker.on("pointerdown", (event) => {
                 if (!patrolToolState.active) return;
+                event.stopPropagation?.(); // keep the layer-level fallback from double-handling
                 if (event.button === 2) {
                     // right-click: quick delete
                     TP.tokenPatroller?.removePlotPoint(this.tokenId, index);
                     return;
                 }
                 if (event.button !== 0) return;
-                this._beginMarkerDrag(marker, index, event);
+                this.beginMarkerDrag(index, event);
             });
+            this._markerEls.push(marker);
             this.markers.addChild(marker);
         });
     }
 
     setEditMode(active) {
-        for (const child of this.markers.children) {
-            if (child === this.selection) continue;
-            child.eventMode = active ? "static" : "none";
-            child.interactive = active;
+        for (const marker of this._markerEls) {
+            marker.eventMode = active ? "static" : "none";
+            marker.interactive = active;
         }
         if (!active) this.clearSelection();
+    }
+
+    // Distance-based hit test of the plotted points (canvas coordinates), used by
+    // the layer-level pointer fallback in RoutesLayer._handleLayerPointerDown.
+    hitTestMarker(gx, gy) {
+        const half = gridSize() / 2;
+        for (let index = 0; index < this.points.length; index++) {
+            const cx = this.points[index].x + half;
+            const cy = this.points[index].y + half;
+            const dx = gx - cx;
+            const dy = gy - cy;
+            if (Math.sqrt(dx * dx + dy * dy) <= this._markerRadius + 6) return { index, cx, cy };
+        }
+        return null;
     }
 
     clearSelection() {
@@ -132,9 +187,12 @@ class RouteDrawing {
         }
     }
 
-    // pointerdown on a marker: select it and start a potential drag. A plain click
-    // leaves the selection + options menu; moving the pointer drags the point.
-    _beginMarkerDrag(marker, index, event) {
+    // pointerdown on a marker (directly or via the layer fallback): select it and
+    // start a potential drag. A plain click leaves the selection + options menu;
+    // moving the pointer drags the point.
+    beginMarkerDrag(index, event) {
+        const marker = this._markerEls[index];
+        if (!marker) return;
         const startGlobal = { x: event?.data?.global?.x ?? 0, y: event?.data?.global?.y ?? 0 };
         const startClient = { x: event?.clientX ?? 0, y: event?.clientY ?? 0 };
         this._selectPoint(index, event?.clientX ?? 0, event?.clientY ?? 0);
