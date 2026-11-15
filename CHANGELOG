@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [3.1.2] - Bug fix
+### Bug Fixes:
+- Fixed worlds still failing to load with `marker.fill is not a function` after 3.1.1: the PIXI build in the affected Foundry versions also lacks the v8 chainable `fill()`/`stroke()` styling (v7-style `lineStyle()`/`beginFill()`/`endFill()` only). Marker dots and the dashed route line are now drawn through whichever API the runtime provides (`circle()`/`drawShape()`/`drawCircle()`/`arc()`/path segments, styled via `fill()`/`stroke()` or `lineStyle()`/`beginFill()`/`endFill()`), and marker interactivity sets both `eventMode` (v8) and `interactive` (v7).
+
 ## [3.1.1] - Bug fix
 ### Bug Fixes:
 - Fixed worlds failing to load with `marker.circle is not a function`: the 3.1.0 plot-point markers called the `Graphics#circle()` helper, which is not available on the PIXI build in the affected Foundry versions and threw uncaught during the routes layer draw. Markers are now drawn via `drawShape(new PIXI.Circle(...))`, falling back to `arc()` or a line-segment path when those are unavailable.

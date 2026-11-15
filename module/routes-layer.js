@@ -63,9 +63,9 @@ class RouteDrawing {
             const cx = point.x + GRID_SIZE;
             const cy = point.y + GRID_SIZE;
             const marker = new PIXI.Graphics();
-            this._drawCircle(marker, cx, cy, radius);
-            marker.fill({ color: this.color, alpha: 0.9 }).stroke({ width: 2, color: 0xffffff, alpha: 0.8 });
+            this._drawMarkerDot(marker, cx, cy, radius);
             marker.eventMode = "static";
+            marker.interactive = true; // PIXI v7-style interactivity flag (no-op in v8)
             marker.hitArea = new PIXI.Circle(cx, cy, radius + 6);
             marker.cursor = "pointer";
             marker.on("pointerdown", (event) => {
@@ -76,13 +76,30 @@ class RouteDrawing {
         });
     }
 
-    // Graphics#circle() is not available on every PIXI build, so add the dot via
-    // drawShape()/arc() when present and fall back to a line-segment path otherwise.
-    _drawCircle(graphics, cx, cy, radius) {
+    // Draws one marker dot. PIXI v8 styles a built path afterwards via fill()/stroke(),
+    // while PIXI v7 styles before drawing via lineStyle()/beginFill()/endFill(), so support both.
+    _drawMarkerDot(marker, cx, cy, radius) {
+        if (typeof marker.fill === "function" && typeof marker.stroke === "function") {
+            this._addCirclePath(marker, cx, cy, radius);
+            marker.fill({ color: this.color, alpha: 0.9 });
+            marker.stroke({ width: 2, color: 0xffffff, alpha: 0.8 });
+        } else {
+            if (typeof marker.lineStyle === "function") marker.lineStyle(2, 0xffffff, 0.8);
+            if (typeof marker.beginFill === "function") marker.beginFill(this.color, 0.9);
+            this._addCirclePath(marker, cx, cy, radius);
+            if (typeof marker.endFill === "function") marker.endFill();
+        }
+    }
+
+    // Adds a circle to the current path using whichever shape API the PIXI build provides:
+    // v8 circle()/drawShape(), v7 drawCircle(), or arc(), and finally a line-segment path.
+    _addCirclePath(graphics, cx, cy, radius) {
         if (typeof graphics.circle === "function") {
             graphics.circle(cx, cy, radius);
         } else if (typeof graphics.drawShape === "function") {
             graphics.drawShape(new PIXI.Circle(cx, cy, radius));
+        } else if (typeof graphics.drawCircle === "function") {
+            graphics.drawCircle(cx, cy, radius);
         } else if (typeof graphics.arc === "function") {
             graphics.arc(cx, cy, radius, 0, Math.PI * 2);
         } else {
@@ -150,8 +167,15 @@ class RouteDrawing {
     _render() {
         this.graphics.clear();
         const phase = ((Date.now() % this.offset) + 1) / this.offset;
-        this._drawDashedLine(phase);
-        this.graphics.stroke({ width: 5, color: this.color, alpha: 0.7 });
+        if (typeof this.graphics.stroke === "function") {
+            // PIXI v8: build the path first, then stroke it
+            this._drawDashedLine(phase);
+            this.graphics.stroke({ width: 5, color: this.color, alpha: 0.7 });
+        } else {
+            // PIXI v7: lineStyle must be set before the path is drawn
+            if (typeof this.graphics.lineStyle === "function") this.graphics.lineStyle(5, this.color, 0.7);
+            this._drawDashedLine(phase);
+        }
     }
 
     _animate() {
