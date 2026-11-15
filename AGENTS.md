@@ -57,6 +57,11 @@ ARCHITECTURE.md      codebase map — read with this file, keep in sync
   `passive` + `!interactiveChildren` subtrees). Point picking is **DOM-level**:
   `registerCanvasPointInteraction()` in `routes-layer.js` listens on the canvas
   element and converts client→world coords via `stage.toLocal`. Keep it that way.
+- **Point picking must never hijack a press on a token.** `onCanvasPointerDown`
+  in `routes-layer.js` drops the event when `tokenAtWorldPoint(world)` finds a
+  token under the pointer (`canvas.tokens.hover` first, then a bounds/document
+  rectangle check while the token layer is active). Without this, dragging a
+  token on top of a point selects and drags the point too. Keep this guard.
 - PIXI v8 events: `event.global` / `event.client` are direct; `event.data` is a
   deprecated getter returning the event itself. Graphics styling: v8 `fill()/stroke()`
   after building the path; the code supports both v8 and v7 APIs — keep it that way.

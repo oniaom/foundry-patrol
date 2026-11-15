@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [3.2.4] - Bug fix
+### Bug Fixes:
+- Fixed dragging a token that sits on top of a patrol point also selecting and dragging the point. The DOM-level point picking in `routes-layer.js` now drops any canvas `pointerdown` whose scene position is inside a token — `tokenAtWorldPoint()` checks `canvas.tokens.hover` first, then falls back to a geometric hit test (`token.bounds.contains`, else the token document's grid-cell rectangle) while the token layer is the active layer. Presses on tokens are left entirely to Foundry (select / drag / context menu), so a point under the token is never selected, moved, or deleted. Left-click / drag / right-click on a bare point still work as before, regardless of the active tool.
+
 ## [3.2.3] - Bug fix
 ### Bug Fixes:
 - Fixed clicking a patrol point circle still doing nothing (it never worked, with or without the Patrol Tool). Point picking no longer relies on PIXI layer hit-testing at all (layer eventMode/interactiveChildren/active-layer behavior made that unreliable across Foundry v13/v14 builds): a single `pointerdown` listener on the canvas element now converts the click to scene coordinates via the stage transform and hit-tests every plotted point directly. Left-click a point circle to get the options popup (**Delete point** / **Move point**, plus a drag hint), drag the point to move it (grid-snapped, persisted on release via `movePlotPoint`), right-click to delete it, click empty space or press Escape to dismiss. Works for GMs regardless of the active canvas layer/tool. The non-functional Patrol Tool scene control was removed.

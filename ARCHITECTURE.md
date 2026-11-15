@@ -17,6 +17,7 @@ RouteDrawing: animated dashed Graphics line + one marker circle Graphics per poi
    ▲
    │  mouse input does NOT go through PIXI — it is DOM-level:
 canvas element pointerdown → registerCanvasPointInteraction() (routes-layer.js)
+   │  (dropped when the press lands on a token — tokenAtWorldPoint)
    │  clientToWorld() via stage.toLocal → RouteDrawing.hitTestMarker() →
    │  left: select (ring + popup) + arm drag · drag: move + snap + movePlotPoint() on release
    │  right: removePlotPoint() · empty click / Escape: clear selection
@@ -81,7 +82,12 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
   listener on `canvas.app.view`; `onCanvasPointerDown` converts the event with
   `clientToWorld()` (bounding rect → canvas bitmap px → `stage.toLocal`) and runs
   `drawing.hitTestMarker(world.x, world.y)` (distance ≤ markerRadius+6 around the
-  point center at `point + grid/2`).
+  point center at `point + grid/2`). Before hit-testing, the event is dropped when
+  `tokenAtWorldPoint(world)` finds a token under the pointer — `canvas.tokens.hover`
+  first, else a geometric check (`token.bounds.contains`, falling back to the token
+  document's grid-cell rectangle) while the token layer is the active layer. A press
+  on a token belongs to Foundry's token layer, so a point under the token is never
+  selected, dragged, or deleted (otherwise dragging a token on a point drags the point).
   - left button → `beginMarkerDrag(index, normalizedEvent)`: selects
     (`_selectPoint` → white ring + `showPointMenu` at client coords) and arms a
     drag via window `pointermove`/`pointerup`/`pointercancel`; `_dragMarkerMove`
