@@ -36,6 +36,7 @@ Every plotted point dot is directly clickable on the map — no toolbar tool nee
 - **Left-click a point** — it gets a white ring and a small options popup appears with **Delete point** and **Move point**.
 - **Drag a point** on the map to move it — it snaps to the grid (unless the scene is gridless) and the route line follows live; the new position is saved when you release.
 - **Right-click a point** to delete it immediately.
+- Pressing on a **token** never touches patrol points — you can select or drag a token that sits on top of a point without selecting, moving, or deleting the point.
 
 ### Deleting points
 
