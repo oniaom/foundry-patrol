@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [3.2.5] - Internal refactor (no functionality change)
+### Changed:
+- Refactored the modules under `module/` for single-responsibility and less duplication, with no behavior change: the walking loop moved from `patroller.js` to `patrol-engine.js`, grid-path math to `linear-routes.js`, delay-string parsing to `delay.js`, the per-token data schema to `schema.js`, DOM/PIXI event coordinate conversion to `coords.js`, PIXI v7/v8 graphics helpers to `pixi-compat.js`, and DOM-level point picking to `point-interaction.js`. `store.js` is now the single owner of the scene flags, `patroller.js` keeps the public `TP.tokenPatroller` API and only coordinates (mutate -> persist -> redraw), and the ~16 identical one-line getters are generated from a table. `hud.js`/`menu.js`/`keys.js`/`vision.js`/`speech.js`/`controls.js`/`config.js` were de-duplicated (button factories, tab/setting tables, shared helpers). Verified by syntax-checking every file plus a mocked behavioral harness: identical side-effect logs between the old and new code across PIXI v8 and v7 drawing paths. Not run in a live Foundry client.
+
 ## [3.2.4] - Bug fix
 ### Bug Fixes:
 - Fixed dragging a token that sits on top of a patrol point also selecting and dragging the point. The DOM-level point picking in `routes-layer.js` now drops any canvas `pointerdown` whose scene position is inside a token — `tokenAtWorldPoint()` checks `canvas.tokens.hover` first, then falls back to a geometric hit test (`token.bounds.contains`, else the token document's grid-cell rectangle) while the token layer is the active layer. Presses on tokens are left entirely to Foundry (select / drag / context menu), so a point under the token is never selected, moved, or deleted. Left-click / drag / right-click on a bare point still work as before, regardless of the active tool.

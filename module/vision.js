@@ -1,6 +1,11 @@
 import { TP } from "./tp.js";
 import { gridSize } from "./util.js";
 
+/**
+ * Sight checks while patrolling: when the guard token's vision spots a player
+ * token (or, optionally, another NPC), the configured reactions fire — stop the
+ * patrol, pause the game, create a combat, and/or say a "caught" quote.
+ */
 export class VisionHandler {
     async evaluateSight(tokenId) {
         if (!TP.tokenPatroller.getVisionChecking(tokenId)) return;
@@ -15,19 +20,10 @@ export class VisionHandler {
     }
 
     async _handlePC(tokenId, guardToken) {
-        const playerTokens = this._determinePCTokens(tokenId);
-        const spottedTokens = [];
-
-        for (const id of playerTokens) {
-            const playerToken = canvas.tokens.get(id);
-            if (!playerToken) continue;
-
-            if (this._checkVision(guardToken, playerToken.center.x, playerToken.center.y)) {
-                spottedTokens.push(playerToken);
-                if (TP.tokenPatroller.getStopWhenSeen(tokenId)) TP.tokenPatroller.stopPatrol(tokenId);
-                if (TP.tokenPatroller.getPauseGame(tokenId)) game.togglePause(true, true);
-            }
-        }
+        const spottedTokens = this._visitVisibleTokens(guardToken, this._determinePCTokens(tokenId), (playerToken) => {
+            if (TP.tokenPatroller.getStopWhenSeen(tokenId)) TP.tokenPatroller.stopPatrol(tokenId);
+            if (TP.tokenPatroller.getPauseGame(tokenId)) game.togglePause(true, true);
+        });
 
         if (TP.tokenPatroller.getCreateCombat(tokenId) && spottedTokens.length > 0 && !game.combat) {
             const combat = await Combat.create({ scene: canvas.scene.id, active: true });
@@ -41,16 +37,25 @@ export class VisionHandler {
     }
 
     async _handleNPC(tokenId, guardToken) {
-        const npcTokens = this._determineNPCTokens(tokenId);
-        const spottedTokens = [];
+        const spottedTokens = this._visitVisibleTokens(guardToken, this._determineNPCTokens(tokenId));
+        if (spottedTokens.length > 0) TP.speechHandler.handleSpeech(tokenId, "other", spottedTokens);
+    }
 
-        for (const id of npcTokens) {
-            const npcToken = canvas.tokens.get(id);
-            if (npcToken && this._checkVision(guardToken, npcToken.center.x, npcToken.center.y)) {
-                spottedTokens.push(npcToken);
+    /**
+     * Runs `onSpotted` for every candidate token the guard can currently see
+     * (check -> react, in candidate order) and returns the spotted tokens.
+     */
+    _visitVisibleTokens(guardToken, candidateIds, onSpotted) {
+        const spotted = [];
+        for (const id of candidateIds) {
+            const token = canvas.tokens.get(id);
+            if (!token) continue;
+            if (this._checkVision(guardToken, token.center.x, token.center.y)) {
+                spotted.push(token);
+                onSpotted?.(token);
             }
         }
-        if (spottedTokens.length > 0) TP.speechHandler.handleSpeech(tokenId, "other", spottedTokens);
+        return spotted;
     }
 
     /**
@@ -89,12 +94,20 @@ export class VisionHandler {
         return !blocked;
     }
 
+    /** Ids of tokens with an actor owned by a non-GM user (player characters). */
     _determinePCTokens(tokenId) {
-        return canvas.tokens.placeables.filter((t) => t.id != tokenId && t.actor && this._ownerIsPC(t.actor)).map((t) => t.id);
+        return this._actorTokens(tokenId, true);
     }
 
+    /** Ids of tokens with an actor NOT owned by a non-GM user (NPCs). */
     _determineNPCTokens(tokenId) {
-        return canvas.tokens.placeables.filter((t) => t.id != tokenId && t.actor && !this._ownerIsPC(t.actor)).map((t) => t.id);
+        return this._actorTokens(tokenId, false);
+    }
+
+    _actorTokens(excludeId, wantPC) {
+        return canvas.tokens.placeables
+            .filter((t) => t.id != excludeId && t.actor && this._ownerIsPC(t.actor) === wantPC)
+            .map((t) => t.id);
     }
 
     _ownerIsPC(actor) {

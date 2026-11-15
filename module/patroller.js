@@ -1,13 +1,35 @@
-import { MODULE } from "./config.js";
 import { TP } from "./tp.js";
-import { gridSize, routesLayer } from "./util.js";
+import { gridSize, routesLayer, isSquareGrid } from "./util.js";
+import { createDefaultPatrolData } from "./schema.js";
+import { normalizeDelayInput, delayToSeconds } from "./delay.js";
+import { generateLinearRoute, rebuildLinearPaths, segmentCount } from "./linear-routes.js";
+import { PatrolEngine } from "./patrol-engine.js";
+import { routesFromTokenMap } from "./routes-layer.js";
+import { showDeleteRouteDialog } from "./controls.js";
 
-const Dialog = foundry.appv1?.api?.Dialog ?? globalThis.Dialog;
-
+/**
+ * TokenPatrollerManager — owns the per-token patrol data (tokenMap) and exposes
+ * the module's public point/route API (`TP.tokenPatroller`). It coordinates the
+ * focused collaborators, each of which owns one responsibility:
+ *  - store.js (PatrolDataManager): persistence in scene flags
+ *  - schema.js: the per-token data schema
+ *  - delay.js: delay-string parsing/formatting
+ *  - linear-routes.js: grid path math for Linear Walk mode
+ *  - patrol-engine.js: the walking loop
+ *  - routes-layer.js: the "routes" render cache + canvas layer
+ *  - controls.js: popup/dialog UI
+ * The manager itself only does: mutate tokenMap -> persist -> redraw.
+ */
 export class TokenPatrollerManager {
     constructor() {
         this.tokenMap = {};
         this.debug = false;
+        this.engine = new PatrolEngine({
+            getData: (tokenId) => this.tokenMap[tokenId],
+            hasData: (tokenId) => Boolean(this.tokenMap[tokenId]),
+            persist: () => this._saveAndUpdate(this.tokenMap),
+            isDebug: () => this.debug,
+        });
     }
 
     static async create() {
@@ -17,6 +39,7 @@ export class TokenPatrollerManager {
         return o;
     }
 
+    /** Marks every stored patrol as not walking (e.g. after a world reload) and persists. */
     async _resetWalk() {
         for (const res of Object.values(this.tokenMap)) {
             res.isWalking = false;
@@ -24,15 +47,21 @@ export class TokenPatrollerManager {
         await this._saveAndUpdate(this.tokenMap);
     }
 
+    /** Persists the tokenMap through the store and keeps the local reference. */
     async _saveAndUpdate(data) {
         this.tokenMap = data;
-        await TP.patrolDataManager.saveMap(this.tokenMap);
+        await TP.patrolDataManager.savePatrols(this.tokenMap);
     }
 
     async initializeHashTable() {
-        this.tokenMap = await TP.patrolDataManager.dataInit();
+        this.tokenMap = await TP.patrolDataManager.getPatrols();
     }
 
+    // ------------------------------------------------------------------
+    // Plot point / route mutations (public API)
+    // ------------------------------------------------------------------
+
+    /** Adds the token's current position as a new patrol point. */
     async addPlotPoint(tokenId) {
         const token = canvas.tokens.get(tokenId);
         if (!token) return;
@@ -43,358 +72,55 @@ export class TokenPatrollerManager {
         await this.linearWalk(true, tokenId);
     }
 
-    async startPatrol(delay = null, tokenId) {
-        delay = delay ? delay : this.delayPeriod;
-        const token = canvas.tokens.get(tokenId);
-        if (!token) return;
-        await this._handleDelayPeriod(delay, tokenId);
-        const patrolData = this.tokenMap[tokenId];
-        if (!patrolData) return;
-
-        this._updatelastRecordedLocation(undefined, token);
-        if (patrolData.isWalking) return;
-        patrolData.isWalking = true;
-        let cycle = this.tokenMap[tokenId].inverted == false ? 1 : 0;
-        try {
-            while (patrolData.isWalking && this._validatePatrol(token)) {
-                await this._saveAndUpdate(this.tokenMap);
-                const result = await this._navigationCycle(cycle, token);
-                if (result) return;
-                cycle = this.tokenMap[tokenId].inverted == false ? 1 : 0;
-            }
-            this._disableWalking(token);
-        } catch (e) {
-            console.log(`Foundry-Patrol: Unexpected error in patrol (was a token deleted during movement?):\n${e}\n${e.stack}`);
-        }
-    }
-
-    async stopPatrol(tokenId) {
-        if (!this.tokenMap[tokenId]) return;
-        this.tokenMap[tokenId].isWalking = false;
-        await this._saveAndUpdate(this.tokenMap);
-    }
-
-    async _navigationCycle(cycle, token) {
-        const patrolData = this.tokenMap[token.id];
-        if (!patrolData) return;
-        let patrolPoints = patrolData.plots;
-
-        if (patrolData.isLinear && canvas.grid.type == CONST.GRID_TYPES.SQUARE) {
-            patrolPoints = patrolData.inverted ? patrolData.countinousRoutes : patrolData.linearPath;
-        }
-
-        let forceReturn;
-        const settings = {
-            INCREMENT: 1,
-            DECREMENT: -1,
-            PLOT_SIZE: patrolPoints.length,
-            RETURN_SIZE: 0,
-            ON_INVERSE_FALSE: false,
-            ON_INVERSE_TRUE: true,
-            OPERATOR_GREATER: function (a, b) {
-                return a >= b;
-            },
-            OPERATOR_LESS: function (a, b) {
-                return a < b;
-            },
-        };
-
-        let lastPos = await this._determineLastPosition(cycle, patrolPoints, token);
-        forceReturn = await this._navigationLoop(
-            patrolPoints,
-            lastPos,
-            settings.PLOT_SIZE,
-            settings.OPERATOR_LESS,
-            settings.ON_INVERSE_FALSE,
-            settings.INCREMENT,
-            token
-        );
-        if (forceReturn) return;
-        lastPos = await this._determineLastPosition(cycle, patrolPoints, token);
-        forceReturn = await this._navigationLoop(
-            patrolPoints,
-            lastPos - 1,
-            settings.RETURN_SIZE,
-            settings.OPERATOR_GREATER,
-            settings.ON_INVERSE_TRUE,
-            settings.DECREMENT,
-            token
-        );
-        if (forceReturn) return;
-    }
-
-    async _navigationLoop(patrolPoints, iterator, comparison, operation, onReturn, increment, token) {
-        const patrolData = this.tokenMap[token.id];
-        if (!patrolData) return;
-        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
-        if (patrolData.onInverseReturn == onReturn) {
-            for (iterator; operation(iterator, comparison); iterator = iterator + increment) {
-                if (!patrolData.isWalking) return true;
-                const combatStarted = game.settings.get(MODULE, "combatPause");
-                if (game.settings.get(MODULE, "tokenRotation") || this.tokenMap[token.id].tokenRotation) {
-                    const dX = patrolPoints[iterator].x - patrolData.lastRecordedLocation.x;
-                    const dY = patrolPoints[iterator].y - patrolData.lastRecordedLocation.y;
-                    this.rotateToken(dX, dY, token);
-                }
-
-                if (patrolData.delayPeriod.length == patrolPoints.length) {
-                    await sleep(patrolData.delayPeriod[iterator]);
-                } else {
-                    await sleep(patrolData.delayPeriod[Math.floor(Math.random() * patrolData.delayPeriod.length)]);
-                }
-                if (!this.tokenMap[token.id]) return;
-
-                if (
-                    patrolData.isWalking &&
-                    !game.paused &&
-                    !(combatStarted && game.combat?.started) &&
-                    !this._wasTokenMoved(token) &&
-                    this._validatePatrol(token) &&
-                    !patrolData.isDeleted
-                ) {
-                    await this._navigateToNextPoint(patrolPoints[iterator], token);
-                    await this._ensureAnimationCompletion(token);
-                    await TP.speechHandler.handleSpeech(token.id, "patrol");
-                    await TP.visionHandler.evaluateSight(token.id);
-                    this._storeLastPlotTaken(iterator, token);
-                } else {
-                    if (game.paused == true || (combatStarted && game.combat?.started)) {
-                        iterator = iterator - increment;
-                    } else {
-                        return true;
-                    }
-                }
-            }
-            if (patrolData.onInverseReturn || patrolData.inverted) {
-                this._setInverseReturn(token);
-            }
-        }
-    }
-
-    async _ensureAnimationCompletion(token) {
-        try {
-            const promise = token.movementAnimationPromise;
-            if (promise) await Promise.race([promise, new Promise((r) => setTimeout(r, 15000))]);
-        } catch (err) {
-            if (this.debug) console.log(`Foundry-Patrol: Error waiting for movement animation\n${err}`);
-        }
-    }
-
-    async _determineLastPosition(cycle, plots, token) {
-        const patrolData = this.tokenMap[token.id];
-        const lastPos = patrolData.lastPos;
-        if (!patrolData.isInverted) {
-            if (cycle != 0 && lastPos == plots.length - 1) {
-                return 0;
-            }
-            return lastPos;
-        }
-        return lastPos;
-    }
-
-    async _navigateToNextPoint(plot, token) {
-        try {
-            if (this._hasAudio(token.id)) {
-                await TP.audioHandler.updateAmbientPosition(plot.x, plot.y, this.tokenMap[token.id].audioId);
-            }
-
-            await token.document.update({ x: plot.x, y: plot.y });
-
-            this._updatelastRecordedLocation(plot, token);
-        } catch (error) {
-            if (this.debug) console.log(`Foundry-Patrol: Error in token navigation\n${error}`);
-        }
-    }
-
-    async _handleDelayPeriod(delay, tokenId) {
-        const MILLISECONDS = 1000;
-        const DEFAULT_SECONDS = 2;
-        const INVALID_NUMBER = 0;
-        if (delay == null || delay === "") {
-            return;
-        }
-        delay = String(delay);
-        if (/[^0-9\-,\s]/.test(delay)) return;
-
-        delay = this._processDelayRegex(delay);
-        if (!delay || delay.length == 0) return;
-        try {
-            for (let i = 0; i < delay.length; ++i) {
-                if (delay[i] <= INVALID_NUMBER) delay[i] = delay[i] * -1 + DEFAULT_SECONDS;
-                delay[i] = delay[i] * MILLISECONDS;
-            }
-            if (this.tokenMap[tokenId]) {
-                this.tokenMap[tokenId].delayPeriod = delay;
-            }
-        } catch (error) {
-            return;
-        }
-        await this._saveAndUpdate(this.tokenMap);
-        return this.tokenMap[tokenId]?.delayPeriod;
-    }
-
-    /**
-     * Parses the string to generate a valid array of ints.
-     * Excess commas are ignored.
-     * Acceptable: [1-5] --> 1,2,3,4,5
-     * Acceptable: 1,2,3,4,5 --> 1,2,3,4,5
-     * Acceptable: [1-5],6,7 --> 1,2,3,4,5,6,7
-     * @param {string} delay
-     */
-    _processDelayRegex(delay) {
-        delay = delay.replace(/\s/g, "");
-        if (delay.length == 0) return [2];
-        const singleValue = delay.match(/[0-9]+/g) ?? [];
-        delay += ",";
-        const commaSeperated = delay.match(/(\d+(?=,))/g);
-        const rangeDelay = delay.match(/(\d+\-\d+)/g);
-        delay = [];
-        if (singleValue.length == 1) {
-            delay.push(parseInt(singleValue[0]));
-            return delay;
-        }
-        if (rangeDelay) {
-            rangeDelay.forEach(function (rangeSet) {
-                const rangeValues = rangeSet.split("-");
-                for (let i = parseInt(rangeValues[0]); i <= parseInt(rangeValues[1]); i++) {
-                    delay[delay.length] = i;
-                }
-            });
-        }
-
-        if (commaSeperated) {
-            commaSeperated.forEach(function (csvValue) {
-                delay[delay.length] = parseInt(csvValue);
-            });
-        }
-        if (this.debug) console.log(`Foundry-Patrol: Wait periods include: ${delay}`);
-        return delay;
-    }
-
-    rotateToken(dX, dY, token) {
-        if (dX == 0 && dY == 0) return;
-        const rotation = (Math.atan2(dY, dX) * 180) / Math.PI;
-        token.document.update({ rotation: ((rotation % 360) + 360) % 360 });
-    }
-
-    async linearWalk(generateEnd, tokenId) {
-        if (canvas.grid.type != CONST.GRID_TYPES.SQUARE) return;
-
-        const plot = foundry.utils.duplicate(this._getPlotsFromId(tokenId));
-        if (!plot) return;
-
-        const len = plot.length - 1;
-        if (generateEnd) {
-            const ROUTE_START = 0;
-            const xMod = plot[ROUTE_START].x >= plot[len].x ? 1 : -1;
-            const yMod = plot[ROUTE_START].y >= plot[len].y ? 1 : -1;
-            this._getGeneral(tokenId, "endCountinousRoutes").length = 0;
-            if (await this._generateLinearRoute(this._getGeneral(tokenId, "endCountinousRoutes"), plot[len], plot[ROUTE_START], xMod, yMod))
-                this._generateLinearPath(tokenId);
-        } else if (plot.length < 2) {
-            this._getGeneral(tokenId, "countinousRoutes").push(plot[0]);
-            await this._saveAndUpdate(this.tokenMap);
-        } else {
-            const xMod = plot[len].x >= plot[len - 1].x ? 1 : -1;
-            const yMod = plot[len].y >= plot[len - 1].y ? 1 : -1;
-            await this._generateLinearRoute(this._getGeneral(tokenId, "countinousRoutes"), plot[len - 1], plot[len], xMod, yMod);
-        }
-    }
-
-    async _generateLinearRoute(route, src, dest, xMod, yMod) {
-        const GRID_SIZE = gridSize();
-
-        if (src.x % GRID_SIZE != 0 && src.y % GRID_SIZE != 0 && dest.x % GRID_SIZE != 0 && dest.y % GRID_SIZE != 0) {
-            ui.notifications.error("Can't process linear walk of the given coordinates. Please check the console output.");
-            console.log(route);
-            console.log(src);
-            console.log(dest);
-            return false;
-        }
-        if (src.x == dest.x && src.y == dest.y) {
-            await this._saveAndUpdate(this.tokenMap);
-            return true;
-        } else if (src.x != dest.x && src.y != dest.y) {
-            src.x += GRID_SIZE * xMod;
-            src.y += GRID_SIZE * yMod;
-            route.push({ x: src.x, y: src.y });
-            return await this._generateLinearRoute(route, src, dest, xMod, yMod);
-        } else if (src.x == dest.x && src.y != dest.y) {
-            src.y += GRID_SIZE * yMod;
-            route.push({ x: src.x, y: src.y });
-            return await this._generateLinearRoute(route, src, dest, xMod, yMod);
-        } else if (src.x != dest.x && src.y == dest.y) {
-            src.x += GRID_SIZE * xMod;
-            route.push({ x: src.x, y: src.y });
-            return await this._generateLinearRoute(route, src, dest, xMod, yMod);
-        }
-        if (this.debug) console.log("Foundry-Patrol: Error in generating continuous route.");
-    }
-
-    _generateLinearPath(tokenId) {
-        const result = [];
-        const contRoutes = this.tokenMap[tokenId].countinousRoutes;
-        const endRoutes = this.tokenMap[tokenId].endCountinousRoutes;
-
-        Object.keys(contRoutes).forEach((key) => result.push(contRoutes[key]));
-        Object.keys(endRoutes).forEach((key) => result.push(endRoutes[key]));
-
-        this.tokenMap[tokenId].linearPath = result;
-    }
-
+    /** Appends a point to the token's route, creating the token's data entry if needed. */
     updateTokenRoute(tokenId, updateData) {
         if (this.tokenMap[tokenId]) {
             this.tokenMap[tokenId].plots.push(updateData);
         } else {
-            this.tokenMap[tokenId] = this._defaultSchema();
+            this.tokenMap[tokenId] = createDefaultPatrolData();
             this.tokenMap[tokenId].plots.push(updateData);
         }
         this._saveAndUpdate(this.tokenMap);
     }
 
     generateTokenSchema(tokenId) {
-        this.tokenMap[tokenId] = this._defaultSchema();
+        this.tokenMap[tokenId] = createDefaultPatrolData();
         this._saveAndUpdate(this.tokenMap);
         return this.tokenMap[tokenId];
     }
 
-    _defaultSchema() {
-        return {
-            color: this._generateColor(),
-            plots: [],
-            linearPath: [],
-            countinousRoutes: [],
-            endCountinousRoutes: [],
-            enabled: false,
-            lastPos: 0,
-            onInverseReturn: false,
-            drawnPlots: [],
-            isWalking: false,
-            inverted: false,
-            isLinear: false,
-            lastRecordedLocation: {},
-            delayPeriod: [2000],
-            isDeleted: false,
-            audioId: null,
-            audioLocal: true,
-            audioPath: null,
-            audioVolume: null,
-            audioRadius: null,
-            tokenRotation: false,
-            visionChecking: false,
-            stopWhenSeen: false,
-            createCombat: false,
-            pauseGame: false,
-            enableQuotes: false,
-            patrolPercent: 25,
-            patrolQuotes: [],
-            catchQuotes: [],
-            otherTokenVision: false,
-            otherTokenVisionQuotes: [],
-            language: "common",
-        };
+    /** Removes the plot point at `index` (right-click on a point / popup button). */
+    async removePlotPoint(tokenId, index) {
+        const data = this.tokenMap[tokenId];
+        if (!data || !Array.isArray(data.plots)) return;
+        if (!Number.isInteger(index) || index < 0 || index >= data.plots.length) return;
+        data.plots.splice(index, 1);
+        data.lastPos = 0;
+        if (data.isLinear) await this._rebuildLinearRoutes(tokenId);
+        await this._saveAndUpdate(this.tokenMap);
+        await this.livePlotUpdate();
     }
 
+    /**
+     * Moves one plotted point to a new position (drag-and-drop on the map),
+     * then persists and redraws the route.
+     */
+    async movePlotPoint(tokenId, index, point) {
+        const data = this.tokenMap[tokenId];
+        if (!data || !Array.isArray(data.plots)) return;
+        if (!Number.isInteger(index) || index < 0 || index >= data.plots.length) return;
+        if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
+        data.plots[index] = { x: point.x, y: point.y };
+        data.lastPos = 0;
+        if (data.isLinear) await this._rebuildLinearRoutes(tokenId);
+        await this._saveAndUpdate(this.tokenMap);
+        await this.livePlotUpdate();
+    }
+
+    /**
+     * Removes route data for a token: either everything (removeAll) or just the
+     * last plotted point (the HUD dialog's "undo last" option).
+     */
     async removeTokenRoute(tokenId, removeAll = false) {
         if (!this.tokenMap[tokenId]) return;
 
@@ -412,7 +138,7 @@ export class TokenPatrollerManager {
             const p2 = this.tokenMap[tokenId].plots[len - 2];
             this.tokenMap[tokenId].plots.pop();
             this.tokenMap[tokenId].lastPos = 0;
-            if (p1 && p2) this.tokenMap[tokenId].countinousRoutes.length -= this._adjustLength(p1, p2);
+            if (p1 && p2) this.tokenMap[tokenId].countinousRoutes.length -= segmentCount(p1, p2, gridSize());
             await this.linearWalk(false, tokenId);
             await this.linearWalk(true, tokenId);
         }
@@ -420,45 +146,20 @@ export class TokenPatrollerManager {
         await this.livePlotUpdate(tokenId);
     }
 
-    _adjustLength(p1, p2) {
-        return Math.floor(Math.sqrt(Math.pow(p2.x - p1.x, 2) + Math.pow(p2.y - p1.y, 2)) / gridSize());
-    }
-
     async removeAllTokenRoutes() {
         await this._saveAndUpdate({});
         await this.livePlotUpdate();
     }
 
-    _generateColor() {
-        return Math.floor(Math.random() * 0xffffff);
-    }
-
+    /** The HUD trash button: asks what to delete, then deletes all or undoes the last point. */
     deleteProcess(tokenId) {
-        const deletePrompt = new Dialog({
-            title: "Patrol Delete",
-            content: "<p>What would you like to do with this token's route?</p>",
-            buttons: {
-                one: {
-                    icon: '<i class="fas fa-check"></i>',
-                    label: "Confirm: Yes, delete all",
-                    callback: () => this.removeTokenRoute(tokenId, true),
-                },
-                two: {
-                    icon: '<i class="fas fa-undo"></i>',
-                    label: "Undo: Yes, but undo last",
-                    callback: () => this.removeTokenRoute(tokenId, false),
-                },
-                three: {
-                    icon: '<i class="fas fa-times"></i>',
-                    label: "Reject: I do not want to delete",
-                    callback: () => console.log("Foundry-Patrol: Mind changed, nothing deleted"),
-                },
-            },
-            default: "three",
+        showDeleteRouteDialog({
+            onDeleteAll: () => this.removeTokenRoute(tokenId, true),
+            onDeleteLast: () => this.removeTokenRoute(tokenId, false),
         });
-        deletePrompt.render(true);
     }
 
+    /** Cleans up a deleted token's patrol data and its ambient sound. */
     async deleteToken(tokenId) {
         if (!this.tokenMap[tokenId]) return;
 
@@ -470,6 +171,7 @@ export class TokenPatrollerManager {
         await this.livePlotUpdate();
     }
 
+    /** Clears the audio settings when the token's ambient sound is deleted. */
     async deleteAmbientSound(tokenId) {
         if (!tokenId || !this.tokenMap[tokenId]) return;
 
@@ -481,6 +183,109 @@ export class TokenPatrollerManager {
         await this._saveAndUpdate(this.tokenMap);
     }
 
+    // ------------------------------------------------------------------
+    // Patrol control (the walking loop itself lives in patrol-engine.js)
+    // ------------------------------------------------------------------
+
+    async startPatrol(delay = null, tokenId) {
+        delay = delay ? delay : this.delayPeriod; // no delay given -> keep the stored delayPeriod
+        const token = canvas.tokens.get(tokenId);
+        if (!token) return;
+        await this._handleDelayPeriod(delay, tokenId);
+        await this.engine.start(token);
+    }
+
+    async stopPatrol(tokenId) {
+        await this.engine.stop(tokenId);
+    }
+
+    _disableWalking(token) {
+        this.engine.disableWalking(token);
+    }
+
+    // ------------------------------------------------------------------
+    // Linear Walk route generation (the math lives in linear-routes.js)
+    // ------------------------------------------------------------------
+
+    /**
+     * Extends the continuous route arrays for the token's current plots.
+     * generateEnd=false appends the leg from the second-to-last to the last
+     * point; generateEnd=true builds the return leg back to the first point.
+     */
+    async linearWalk(generateEnd, tokenId) {
+        if (!isSquareGrid()) return;
+
+        const plot = foundry.utils.duplicate(this._getPlotsFromId(tokenId));
+        if (!plot) return;
+
+        const onArrive = () => this._saveAndUpdate(this.tokenMap);
+        const grid = gridSize();
+        const len = plot.length - 1;
+        if (generateEnd) {
+            const xMod = plot[0].x >= plot[len].x ? 1 : -1;
+            const yMod = plot[0].y >= plot[len].y ? 1 : -1;
+            const endCountinousRoutes = this._getGeneral(tokenId, "endCountinousRoutes");
+            endCountinousRoutes.length = 0;
+            const arrived = await generateLinearRoute(endCountinousRoutes, plot[len], plot[0], xMod, yMod, grid, onArrive);
+            if (arrived) {
+                this.tokenMap[tokenId].linearPath = [...this._getGeneral(tokenId, "countinousRoutes"), ...endCountinousRoutes];
+            }
+        } else if (plot.length < 2) {
+            this._getGeneral(tokenId, "countinousRoutes").push(plot[0]);
+            await this._saveAndUpdate(this.tokenMap);
+        } else {
+            const xMod = plot[len].x >= plot[len - 1].x ? 1 : -1;
+            const yMod = plot[len].y >= plot[len - 1].y ? 1 : -1;
+            await generateLinearRoute(this._getGeneral(tokenId, "countinousRoutes"), plot[len - 1], plot[len], xMod, yMod, grid, onArrive);
+        }
+    }
+
+    /** Rebuilds all linear route arrays from scratch after a point was moved/removed. */
+    async _rebuildLinearRoutes(tokenId) {
+        if (!isSquareGrid()) return;
+        const data = this.tokenMap[tokenId];
+        const plots = data?.plots ?? [];
+        const linearPath = await rebuildLinearPaths(
+            plots,
+            data.countinousRoutes,
+            data.endCountinousRoutes,
+            gridSize(),
+            () => this._saveAndUpdate(this.tokenMap)
+        );
+        if (linearPath !== null) data.linearPath = linearPath;
+    }
+
+    // ------------------------------------------------------------------
+    // Delay period (parsing lives in delay.js)
+    // ------------------------------------------------------------------
+
+    /**
+     * Parses a user-entered delay string (seconds) into milliseconds and stores
+     * it as the token's delayPeriod. Returns the stored delayPeriod, or
+     * undefined when the input was empty/invalid (nothing is stored then).
+     */
+    async _handleDelayPeriod(delay, tokenId) {
+        const parsed = normalizeDelayInput(delay, this.debug);
+        if (!parsed || parsed.length == 0) return;
+        if (this.tokenMap[tokenId]) {
+            this.tokenMap[tokenId].delayPeriod = parsed;
+        }
+        await this._saveAndUpdate(this.tokenMap);
+        return this.tokenMap[tokenId]?.delayPeriod;
+    }
+
+    /** The token's delayPeriod converted to seconds (for the HUD delay field). */
+    async getDelayPeriod(tokenId) {
+        const patrolData = this.tokenMap[tokenId];
+        if (!patrolData) return;
+        return delayToSeconds(patrolData.delayPeriod);
+    }
+
+    // ------------------------------------------------------------------
+    // Render sync: project plots into the "routes" flag and redraw the layer
+    // ------------------------------------------------------------------
+
+    /** After any mutation of plot points: sync the routes flag and redraw the layer. */
     async livePlotUpdate() {
         await this._syncRoutesFlag();
         await routesLayer()?.draw();
@@ -491,128 +296,13 @@ export class TokenPatrollerManager {
      * RoutesLayer can render all routes persistently (not just the selected token).
      */
     async _syncRoutesFlag() {
-        const scene = canvas.scene;
-        if (!scene) return;
-        const routes = {};
-        for (const [tokenId, data] of Object.entries(this.tokenMap ?? {})) {
-            const plots = data?.plots;
-            if (!plots || plots.length == 0) continue;
-            routes[tokenId] = {
-                points: foundry.utils.duplicate(plots),
-                dash: 25,
-                gap: 25,
-                offset: 750,
-                color: data.color,
-                fb: !!data.inverted,
-                tokenId: tokenId,
-            };
-        }
-        await scene.setFlag(MODULE, "routes", routes);
+        if (!canvas.scene) return;
+        await TP.patrolDataManager.saveRoutes(routesFromTokenMap(this.tokenMap));
     }
 
-    async removePlotPoint(tokenId, index) {
-        const data = this.tokenMap[tokenId];
-        if (!data || !Array.isArray(data.plots)) return;
-        if (!Number.isInteger(index) || index < 0 || index >= data.plots.length) return;
-        data.plots.splice(index, 1);
-        data.lastPos = 0;
-        if (data.isLinear) await this._rebuildLinearRoutes(tokenId);
-        await this._saveAndUpdate(this.tokenMap);
-        await this.livePlotUpdate();
-    }
-
-    /**
-     * Moves one plotted point to a new position (drag-and-drop in the Patrol Tool),
-     * then persists and redraws the route.
-     */
-    async movePlotPoint(tokenId, index, point) {
-        const data = this.tokenMap[tokenId];
-        if (!data || !Array.isArray(data.plots)) return;
-        if (!Number.isInteger(index) || index < 0 || index >= data.plots.length) return;
-        if (!point || !Number.isFinite(point.x) || !Number.isFinite(point.y)) return;
-        data.plots[index] = { x: point.x, y: point.y };
-        data.lastPos = 0;
-        if (data.isLinear) await this._rebuildLinearRoutes(tokenId);
-        await this._saveAndUpdate(this.tokenMap);
-        await this.livePlotUpdate();
-    }
-
-    async _rebuildLinearRoutes(tokenId) {
-        if (canvas.grid.type != CONST.GRID_TYPES.SQUARE) return;
-        const plots = this._getPlotsFromId(tokenId) ?? [];
-        const cont = this._getGeneral(tokenId, "countinousRoutes");
-        const end = this._getGeneral(tokenId, "endCountinousRoutes");
-        cont.length = 0;
-        end.length = 0;
-        if (plots.length == 0) {
-            this._getGeneral(tokenId, "linearPath").length = 0;
-            return;
-        }
-        cont.push({ x: plots[0].x, y: plots[0].y });
-        for (let i = 1; i < plots.length; i++) {
-            const src = { x: plots[i - 1].x, y: plots[i - 1].y };
-            const dest = plots[i];
-            const xMod = dest.x >= src.x ? 1 : -1;
-            const yMod = dest.y >= src.y ? 1 : -1;
-            await this._generateLinearRoute(cont, src, dest, xMod, yMod);
-        }
-        if (plots.length >= 2) {
-            const len = plots.length - 1;
-            const xMod = plots[0].x >= plots[len].x ? 1 : -1;
-            const yMod = plots[0].y >= plots[len].y ? 1 : -1;
-            if (await this._generateLinearRoute(end, { x: plots[len].x, y: plots[len].y }, plots[0], xMod, yMod))
-                this._generateLinearPath(tokenId);
-        }
-    }
-
-    _getPlotsFromId(tokenId) {
-        return this.tokenMap[tokenId]?.plots;
-    }
-
-    _getGeneral(tokenId, desiredProperty) {
-        return this.tokenMap[tokenId]?.[desiredProperty];
-    }
-
-    _validatePatrol(token) {
-        const patrolPoints = this._getPlotsFromId(token.id);
-        if (!patrolPoints || patrolPoints.length <= 1) {
-            return false;
-        }
-        return true;
-    }
-
-    _storeLastPlotTaken(plotNumber, token) {
-        this.tokenMap[token.id].lastPos = plotNumber;
-        this._saveAndUpdate(this.tokenMap);
-    }
-
-    _updatelastRecordedLocation(futurePlot, token) {
-        const lastRecordedLocation = this.tokenMap[token.id].lastRecordedLocation;
-        if (futurePlot != undefined) {
-            lastRecordedLocation.x = futurePlot.x;
-            lastRecordedLocation.y = futurePlot.y;
-        } else {
-            lastRecordedLocation.x = token.x;
-            lastRecordedLocation.y = token.y;
-        }
-        this._saveAndUpdate(this.tokenMap);
-    }
-
-    _wasTokenMoved(token) {
-        try {
-            if (
-                this.tokenMap[token.id].lastRecordedLocation.x != token.x ||
-                this.tokenMap[token.id].lastRecordedLocation.y != token.y
-            ) {
-                this.tokenMap[token.id].isWalking = false;
-                return true;
-            }
-            return false;
-        } catch (error) {
-            if (this.debug) console.log(`Foundry-Patrol: Error in validating patrol status -> \n ${error}`);
-            return true;
-        }
-    }
+    // ------------------------------------------------------------------
+    // Toggles, form binding and small accessors
+    // ------------------------------------------------------------------
 
     _setLinear(tokenId) {
         if (!this.tokenMap[tokenId]) return;
@@ -629,97 +319,13 @@ export class TokenPatrollerManager {
         this.livePlotUpdate(tokenId);
     }
 
-    _setInverseReturn(token) {
-        if (!this.tokenMap[token.id]) return;
-        this.tokenMap[token.id].onInverseReturn = !this.tokenMap[token.id].onInverseReturn;
-        this._saveAndUpdate(this.tokenMap);
-    }
-
-    _disableWalking(token) {
-        if (!token || !this.tokenMap[token.id]) return;
-        this.tokenMap[token.id].isWalking = false;
-        this._saveAndUpdate(this.tokenMap);
-    }
-
-    async getDelayPeriod(tokenId) {
-        if (!this.tokenMap[tokenId]) return;
-        const patrolData = this.tokenMap[tokenId];
-        const userDisplayDelay = [];
-        for (let i = 0; i < patrolData.delayPeriod.length; ++i) {
-            userDisplayDelay.push(patrolData.delayPeriod[i] / 1000);
-        }
-        return userDisplayDelay;
-    }
-
-    getLanguage(tokenId) {
-        return this.tokenMap[tokenId]?.language;
-    }
-
-    getAudioPath(tokenId) {
-        return this.tokenMap[tokenId]?.audioPath;
-    }
-
-    getPatrolPercent(tokenId) {
-        return this.tokenMap[tokenId]?.patrolPercent;
-    }
-
-    getAudioLocal(tokenId) {
-        return this.tokenMap[tokenId]?.audioLocal;
-    }
-
-    getAudioVolume(tokenId) {
-        return this.tokenMap[tokenId]?.audioVolume;
-    }
-
-    getAudioRadius(tokenId) {
-        return this.tokenMap[tokenId]?.audioRadius;
-    }
-
-    getAudioID(tokenId) {
-        return this.tokenMap[tokenId]?.audioId;
-    }
-
-    getEnableQuotes(tokenId) {
-        return this.tokenMap[tokenId]?.enableQuotes;
-    }
-
-    getVisionChecking(tokenId) {
-        return this.tokenMap[tokenId]?.visionChecking;
-    }
-
-    getOtherVisionChecking(tokenId) {
-        return this.tokenMap[tokenId]?.otherTokenVision;
-    }
-
-    getStopWhenSeen(tokenId) {
-        return this.tokenMap[tokenId]?.stopWhenSeen;
-    }
-
-    getCreateCombat(tokenId) {
-        return this.tokenMap[tokenId]?.createCombat;
-    }
-
-    getPauseGame(tokenId) {
-        return this.tokenMap[tokenId]?.pauseGame;
-    }
-
-    getPatrolQuotes(tokenId) {
-        return this.tokenMap[tokenId]?.patrolQuotes;
-    }
-
-    getCatchQuotes(tokenId) {
-        return this.tokenMap[tokenId]?.catchQuotes;
-    }
-
-    getOtherTokenVisionQuotes(tokenId) {
-        return this.tokenMap[tokenId]?.otherTokenVisionQuotes;
-    }
-
+    /** The token's patrol data, creating (and persisting) a default entry if missing. */
     getTokenData(tokenId) {
         if (this.tokenMap[tokenId]) return this.tokenMap[tokenId];
         return this.generateTokenSchema(tokenId);
     }
 
+    /** Applies the PatrolMenu form data to the token's entry (toggles flip via their setters). */
     updateFormRelatedData(formData, tokenId) {
         if (!this.tokenMap[tokenId]) this.generateTokenSchema(tokenId);
         for (const key in formData) {
@@ -738,4 +344,42 @@ export class TokenPatrollerManager {
     _hasAudio(tokenId) {
         return this.tokenMap[tokenId]?.audioId != null;
     }
+
+    _getPlotsFromId(tokenId) {
+        return this.tokenMap[tokenId]?.plots;
+    }
+
+    _getGeneral(tokenId, desiredProperty) {
+        return this.tokenMap[tokenId]?.[desiredProperty];
+    }
+}
+
+/**
+ * Read-only accessors for per-token settings, generated from this table so the
+ * public API (used by vision.js, speech.js, menu.js, hud.js) stays stable without
+ * copy-pasted one-line getters. Each entry maps a getter name to the tokenMap
+ * field it reads.
+ */
+const FIELD_GETTERS = {
+    getLanguage: "language",
+    getAudioPath: "audioPath",
+    getPatrolPercent: "patrolPercent",
+    getAudioLocal: "audioLocal",
+    getAudioVolume: "audioVolume",
+    getAudioRadius: "audioRadius",
+    getAudioID: "audioId",
+    getEnableQuotes: "enableQuotes",
+    getVisionChecking: "visionChecking",
+    getOtherVisionChecking: "otherTokenVision",
+    getStopWhenSeen: "stopWhenSeen",
+    getCreateCombat: "createCombat",
+    getPauseGame: "pauseGame",
+    getPatrolQuotes: "patrolQuotes",
+    getCatchQuotes: "catchQuotes",
+    getOtherTokenVisionQuotes: "otherTokenVisionQuotes",
+};
+for (const [methodName, field] of Object.entries(FIELD_GETTERS)) {
+    TokenPatrollerManager.prototype[methodName] = function (tokenId) {
+        return this.tokenMap[tokenId]?.[field];
+    };
 }
