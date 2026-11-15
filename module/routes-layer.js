@@ -1,4 +1,5 @@
 import { MODULE } from "./config.js";
+import { TP } from "./tp.js";
 import { gridSize } from "./util.js";
 
 const CanvasLayer = foundry.canvas.layers.CanvasLayer ?? globalThis.CanvasLayer;
@@ -23,6 +24,7 @@ export class RoutesLayer extends CanvasLayer {
             const drawing = new RouteDrawing(data);
             this._drawings.push(drawing);
             this.objects.addChild(drawing.graphics);
+            this.objects.addChild(drawing.markers);
         }
     }
 
@@ -34,8 +36,9 @@ export class RoutesLayer extends CanvasLayer {
 }
 
 /**
- * Draws the animated dashed line that visualizes a single token's patrol route.
- * PIXI v8 compatible (stroke() instead of the removed lineStyle()).
+ * Draws the animated dashed line that visualizes a single token's patrol route,
+ * plus a clickable marker at every plotted point (left-click a marker to delete
+ * that point). PIXI v8 compatible (stroke()/fill() instead of the removed lineStyle()).
  */
 class RouteDrawing {
     constructor(data) {
@@ -47,8 +50,29 @@ class RouteDrawing {
         this.color = Number(data.color ?? 0xffffff);
         this.tokenId = data.tokenId;
         this.graphics = new PIXI.Graphics();
+        this.markers = new PIXI.Container();
         this.destroyed = false;
+        this._drawMarkers();
         this._animate();
+    }
+
+    _drawMarkers() {
+        const GRID_SIZE = gridSize() / 2;
+        const radius = Math.max(8, gridSize() / 6);
+        this.points.forEach((point, index) => {
+            const cx = point.x + GRID_SIZE;
+            const cy = point.y + GRID_SIZE;
+            const marker = new PIXI.Graphics();
+            marker.circle(cx, cy, radius).fill({ color: this.color, alpha: 0.9 }).stroke({ width: 2, color: 0xffffff, alpha: 0.8 });
+            marker.eventMode = "static";
+            marker.hitArea = new PIXI.Circle(cx, cy, radius + 6);
+            marker.cursor = "pointer";
+            marker.on("pointerdown", (event) => {
+                if (event.button !== 0) return;
+                TP.tokenPatroller?.removePlotPoint(this.tokenId, index);
+            });
+            this.markers.addChild(marker);
+        });
     }
 
     _drawDashedLine(offset) {
@@ -123,5 +147,6 @@ class RouteDrawing {
     destroy() {
         this.destroyed = true;
         this.graphics.destroy();
+        this.markers.destroy({ children: true });
     }
 }

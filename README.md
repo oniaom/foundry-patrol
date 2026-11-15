@@ -1,144 +1,86 @@
-# IMPORTANT NOTE
-This is a fork, updated for Foundry VTT V13 and V14.
+# Foundry Token Patroller
+
+> **Note:** This is a fork of *Token Patroller* (originally by Jacob McAuley), updated for **Foundry VTT V13 and V14**. It is not affiliated with or endorsed by the original author.
+
+Give your tokens the ability to navigate automatically by selecting patrol points. Plot a route for a token, press start, and it walks the route on its own — great for patrolling guards, wandering monsters, market crowds, and more.
+
+## Requirements
+
+- Foundry VTT **V13 or later** (verified on V14)
+- Square grids are required for *Linear Walk* mode (see below); other grid types work in normal Plot Walk mode
+
+## Installation
+
+**Recommended (auto-updates):** In Foundry, open the launcher's **Add-On Modules** tab → **Install Module** → paste:
+
+```
+https://github.com/oniaom/foundry-patrol/raw/master/module.json
+```
+
+**Manual:** download [the zip](https://github.com/oniaom/foundry-patrol/archive/master.zip), extract it into your `Data/modules/` folder, and reload Foundry.
+
+Then enable **Foundry Token Patroller** in your world's *Manage Modules* and reload the world.
 
 
-# Foundry Token Patrol
+## Usage: plotting a route
 
-This module allows GMs (and optionally players) to set patrol points for their tokens, making the tokens move between the set points without input. Foundry Patrol offers a wide variety of features! I highly recommend watching the linked video below for a demonstration. The video is long, but you're welcome to skip through it or watch it at max speed!
+1. **Select a token** (left-click). The token HUD appears with the patrol icons in the left column.
+2. Click **Add Point** (map icon). This records the token's **current position** as a patrol point. A colored dot appears on the map at that spot.
+3. **Move the token** a few squares and click **Add Point** again. Repeat to build the route.
+4. The plotted points are shown as **dots**, connected by an **animated dashed line** in the token's route color. All plotted routes are visible at all times (GM only) — you no longer need to keep the token selected to see them.
 
-### Reasoning
+### Deleting points
 
-Using this mod, you will be able to set up "Patrol Routes" which tokens will move to based on a timing of your choice. This can give certain scenes a more life like appearance! Make your markets full of life and give your castles that patrolling retinue they've always needed!
+- **Left-click a point dot** on the canvas to delete that single point.
+- Click the **trash icon** in the token HUD to delete **all** points of the token, or just the **last** point (you choose in the dialog).
 
-### WARNING (READ)
+### Starting / stopping a patrol
 
-**Mod Incompatabilities from the original fork, not actually checked against latest version:**
-1. Search Anywhere
-2. Any module similar to above.
+- Click the **walking icon** (Start route) to make the token walk its route. The icon switches to a stop icon — click it to halt.
+- The **text field** next to it sets the delay (in seconds) between points, e.g. `2` or `1, 4, 2` or `1-5`.
+- The **recycle / arrows icon** toggles between *Cycle Mode* (loop the route) and *Forwards-Backwards Mode* (walk the route and then back).
+- The **line / linear icon** toggles *Plot Walk* vs *Linear Walk* (square grids only — fills in the grid spaces between points so diagonal movement looks like a straight line).
+- The **caret icon** (right column) opens the full **Patrol Menu** with per-token settings: quotes, vision reactions, ambient audio, delay, rotation, language, and more.
 
-A lot of these features use calculations that may or may not be overwhelming to your computer. Please keep this in mind when using quotes/vision/audio with several tokens on one scene.
+### Keybindings (GM, defaults)
 
-If your computer is capable of handling all the weight, by all means, please go wild!
+Configurable in *Configure Controls* → *Keybindings* under the module:
 
-### FVTT Version
+| Action | Default | Effect |
+| --- | --- | --- |
+| Start Routes | Ctrl+Shift+G | Start routes for selected tokens (or all owned tokens) |
+| Stop Routes | Ctrl+Shift+H | Halt those routes |
+| Add Plot Point | Ctrl+Shift+R | Add current position of each selected token as a point |
+| Clear Routes | Ctrl+Shift+D | Clear routes of selected (or all owned) tokens |
+| Generate Patrol Macro | Ctrl+Shift+M | Create a macro that starts the selected tokens' patrols |
 
--   Requires Foundry VTT V13 or later (verified on V14)
--   No known module incompatibilities.
+## API
 
-### IMPORTANT / BUGS (from the original fork, not actually checked against latest version)
+Available on the global `TP` object (GM side), handy for macros:
 
-**Remember to back up your world before using mods**
+```js
+TP.tokenPatroller.addPlotPoint(tokenId);              // record the token's current position as a point
+TP.tokenPatroller.removePlotPoint(tokenId, index);    // delete one plotted point by index
+TP.tokenPatroller.startPatrol("2", tokenId);          // start patrolling, 2s between points
+TP.tokenPatroller.stopPatrol(tokenId);                // stop patrolling
+```
 
-Here are all the known issues at the moment:
+## Features beyond routing
 
-1. Group selecting tokens for deletion while patrolling is active _sometimes_ results in an error message occuring. Hit F5 to refresh to fix.
-2. Games with two or more GM or assistant permissions will find unexpected behavior.
+- **Quotes** — tokens can speak while patrolling or when spotted (single-quote delimited, `{token.name}` placeholder supported).
+- **Vision reactions** — use the token's own vision to detect PCs/NPCs; optionally stop the patrol, pause the game, or start combat when seen.
+- **Ambient audio** — attach a sound that follows the patrolling token.
+- **Token rotation** — tokens face the direction they are walking.
 
-### It's a feature not a bug!
+All of these are configured per token in the Patrol Menu (caret icon in the token HUD).
 
-1. Tokens moving through linear mode on a diagonal may take an unexpect route to reach the point. This is how the function currently works. Future updates will adjust this.
-2. Ungridded and hexagonal maps are prohibited from using linear(in between) node based pathing. Only square maps will allow for it.
+## Known quirks (Exist in original mod but not checked against latest foundry version)
 
-### Features
+- Deleting several tokens at once while they are patrolling can occasionally throw an error — refresh (F5) to recover.
+- Running multiple GM/assistant users at once can behave unexpectedly.
 
-Here is a quick TLDR of the features available in Foundry Patrol.
+## Attributions
 
-## Token Patrol Caret HUD
-
-Access all the token related information within the caret HUD menu. Every individual token related settings can be adjusted or changed here.
-
-![caretHud](imgs/examples/caretHUD.png)
-
-## General Settings Tab
-
-Clicking the above Caret will open the Settings Tab. From here you can make your token patroller speak, use vision features, and keep an Ambient Sound
-
-![patrolMenu](imgs/examples/Settings.png)
-
-## Quotes
-
-With this setting, Patrolling tokens can make mentions towards NPCs and PCs depending on the enabled settings.
-
-This mode requires that Token Vision is enabled, including setting the sight on the token itself, and the corresponding quotes settings enabled. This can be seen more in detail by using the module and reading the hints.
-
-# Quote Parsing
-
-If you'd like to add an additional layer of fun to your game, you can use the keyword **{token.name}** within your single quotes to substitute the first seen token within. See the image below!
-
-**Note:** The single quote ---> **'** is used as the delimiting factor in seeing quotes. So if you put a quote like 'This isn **'** t fair!' an error will be thrown, as the parser would break this into {'This isn', 't fair <--- ERROR NO ENDING}
-
-![patrolQuotes](imgs/examples/tokenQuotes.png)
-
-## Vision
-
-Token Vision adds some important features to the token patrol module. Using this option allows for tokens to use their existing vision (meaning you have to have set vision up within the FOUNDRY CORE vision) to interact with objects while on patrol.
-
-The options include
-
-1. Enable/Disable vision checking
-2. Other Token Vision mode --> Used to check for NPCS
-3. Stop Patrol when Player is seen --> Does what it sounds like
-4. Create Combat when Player is seen --> Does what it sounds like
-5. Pause Game when Player is seen --> Does what it sounds like.
-
-## Audio
-
-Token Audio allows for you to create trailing ambient sound on your token patrols! This can create the affects of footsteps, growling, talking, or even a marching band!
-
-![ambientAudio](imgs/examples/ambientAudio.png)
-
-## Generate Macros
-
-By using the set hotkey in the module settings, highlighting the tokens you wish to use, you can create a macro that will automatically start (or stop if you adjust it) the patrols when press.
-
-This is super useful when used in combination with [Furnace's](https://github.com/kakaroto/fvtt-module-furnace) advance macro features, so that you can use [TriggerHappy](https://github.com/kakaroto/fvtt-module-trigger-happy) to call the macro under certain triggers!
-
-Perhaps your player tripped a tripwire and now the guards are on the way!
-
-## API Access
-
-API calling available: Namespaced under TP these are good for macros!
-
-1. TP.tokenPatroller.startPatrol(delay: string, tokenId: string)
-2. TP.tokenPatroller.stopPatrol(tokenId: string)
-3. TP.tokenPatroller.addPlotPoint(tokenId: string) // Takes the tokens current position as a point.
-
-### Installation Instructions
-
-To install Foundry-patrol, do the following:
-
-1. [Download the zip file](https://github.com/oniaom/foundry-patrol/archive/master.zip)
-2. Extract the folder to your modules in Foundry VTT.
-3. Reload your application.
-
-Auto-Installation Instructions:
-
-1. Copy this link: https://github.com/oniaom/foundry-patrol/raw/master/module.json
-2. Open FoundryVTT and navigate to Add-On Modules
-3. Select "Install Module" and paste link into textbox.
-4. Click "Install" and watch as the mod is installed!
-
-### Usage
-
-1. Download and install the mod, then enable it on Foundry.
-2. Right click a token to view the tokenHUD.
-3. Refer to the following image for descriptions of icons.
-
-### Optional Token HUD examples
-
-This menu can be disabled with settings!
-
-![example_picture1](imgs/examples/example1.png)
-![example_picture2](imgs/examples/example2.png)
-
-
-### Attributions
-
-Azzurite's setting extender provided the necessary tools to allow for keybinding.
-
-Linear Walk found at: https://www.iconfinder.com/icons/214663/arrow_points_icon
-Normal Walk found at: https://www.iconfinder.com/icons/2639849/chart_line_icon
-
-### Special Thanks
-
-Special thanks to the original author of this mod, JacobMcAuley
+- Fork of *Token Patroller* by Jacob McAuley.
+- Linear Walk icon: https://www.iconfinder.com/icons/214663/arrow_points_icon
+- Normal Walk icon: https://www.iconfinder.com/icons/2639849/chart_line_icon
