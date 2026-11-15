@@ -1,5 +1,5 @@
 # IMPORTANT NOTE
-This is an actively maintained fork, updated for Foundry VTT V13 and V14.
+This is a fork, updated for Foundry VTT V13 and V14.
 
 
 # Foundry Token Patrol
