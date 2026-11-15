@@ -1,0 +1,101 @@
+# AGENTS.md — Foundry Token Patroller (foundry-patrol)
+
+> **Mandatory reading rule:** Before starting ANY task in this repo, read this file
+> (`AGENTS.md`) **and** `ARCHITECTURE.md` in full. They are written for someone with
+> zero context. After ANY change you make (code, behavior, structure, docs), update
+> both files in the same commit/PR so they never go stale. If you change how something
+> works, change the docs in the same change — do not leave doc updates "for later".
+
+## What this is
+
+A Foundry VTT module (id `foundry-patrol`) for **V13/V14 only** (PIXI v8). It lets a GM
+plot patrol points for tokens; tokens then walk their route automatically. Plain ES
+modules under `module/`, entry point `module/foundry-patrol.js` (see `module.json` →
+`esmodules`). No build step, no test runner, no package.json — edit and reload Foundry.
+
+## First 5 minutes (read in this order)
+
+1. This file.
+2. `ARCHITECTURE.md` — how the codebase works and which files/functions connect.
+3. `module/foundry-patrol.js` — entry point, hooks, layer registration.
+4. `module/routes-layer.js` — rendering of routes + **all mouse interaction with points**.
+5. `module/patroller.js` — the patrol engine and the per-token data schema.
+
+## Repo layout
+
+```
+module.json            manifest (id, version, compatibility 13/14, esmodules entry)
+module/
+  foundry-patrol.js    entry point: settings, hooks, CONFIG.Canvas.layers registration
+  config.js            MODULE id + world/client settings definitions
+  tp.js                the global TP object all modules share (assigned in entry point)
+  util.js              gridSize(), routesLayer() lookup helpers
+  store.js             PatrolDataManager — persists everything in scene flags
+  patroller.js         TokenPatrollerManager — tokenMap, plot points, patrol loop, API
+  routes-layer.js      RoutesLayer (custom canvas layer) + RouteDrawing + point picking
+  controls.js          patrol-point popup menu (showPointMenu/closePointMenu) + selection state
+  hud.js               token HUD buttons (add point, delete, start/stop, linear, menu)
+  menu.js              PatrolMenu FormApplication (templates/patrol_menu.html)
+  keys.js              GM keybindings (start/stop/add/clear/macro)
+  vision.js            sight checks while patrolling (stop/pause/combat on spotted)
+  speech.js            chat quotes (Polyglot-aware) while patrolling / when spotted
+  audio.js             ambient sound that follows the patrolling token
+templates/patrol_menu.html
+css/foundry-menu.css(.scss)   menu styles
+README.md            user docs — update when behavior changes
+CHANGELOG            Keep-a-Changelog; every release has an entry here
+ARCHITECTURE.md      codebase map — read with this file, keep in sync
+```
+
+## Hard rules / gotchas (Foundry v13/v14 + PIXI v8)
+
+- **`canvas.layers` is an Array in v13+**, not a keyed object. Always use
+  `routesLayer()` from `util.js` to get the routes layer — never `canvas.layers.x`.
+- **Never pick patrol points via PIXI layer hit-testing.** It has never worked
+  reliably here (depends on layer `eventMode`/`interactiveChildren`/active layer —
+  v13 `CanvasLayer` defaults `interactiveChildren = false`, and PIXI v8 prunes
+  `passive` + `!interactiveChildren` subtrees). Point picking is **DOM-level**:
+  `registerCanvasPointInteraction()` in `routes-layer.js` listens on the canvas
+  element and converts client→world coords via `stage.toLocal`. Keep it that way.
+- PIXI v8 events: `event.global` / `event.client` are direct; `event.data` is a
+  deprecated getter returning the event itself. Graphics styling: v8 `fill()/stroke()`
+  after building the path; the code supports both v8 and v7 APIs — keep it that way.
+- All persistent data lives in **scene flags**: `patrols` (source of truth,
+  `PatrolDataManager`) and `routes` (render cache synced by
+  `TokenPatrollerManager._syncRoutesFlag`). Never add new storage without updating
+  `ARCHITECTURE.md`.
+- Route rendering is **GM-only** (`RoutesLayer._draw` sets `visible = game.user.isGM`).
+- After any mutation of plot points call `livePlotUpdate()` (syncs the `routes` flag
+  and redraws the layer). The layer's `_draw()` recreates all children, so any
+  per-frame/selection state must be re-applied there (`_restoreSelection()`).
+
+## Conventions
+
+- **Every change bumps the version** in `module.json` and gets a `CHANGELOG` entry
+  (Keep a Changelog format, newest on top). This is strictly followed in git history.
+- **PRs:** branch from `master` named `fix/...` or `feat/...`, one logical change per
+  PR. In this session, local `git commit`/`git push` may be blocked by policy — use
+  the GitHub connector tools (`create_branch`, `push_files`, `create_pull_request`,
+  `pull_request_read`) against owner `oniaom`, repo `foundry-patrol`.
+- **No test runner / no Foundry client available.** Verify by: (a) syntax-checking
+  every file in `module/` (strip `import`/`export` lines, parse with `new Function`),
+  (b) a mocked behavioral test (mock PIXI/foundry/canvas/window/document, eval the
+  real module sources, drive the flow — see the scratchpad test pattern used for
+  `routes-layer.js`), (c) `git diff` review. Say explicitly when something was NOT
+  run in a live Foundry client.
+- Match existing code style: 4-space indent, double quotes, JSDoc-ish comments on
+  non-obvious behavior. Minimal diffs; don't refactor what wasn't asked.
+
+## Task → where to look
+
+| Task | Files |
+| --- | --- |
+| Change point rendering / click / drag / delete interaction | `module/routes-layer.js`, `module/controls.js` |
+| Change patrol walking logic, delays, linear walk | `module/patroller.js` |
+| Change data storage / flags | `module/store.js`, `patroller.js` (`_syncRoutesFlag`, `livePlotUpdate`) |
+| Token HUD buttons | `module/hud.js` |
+| Patrol Menu form | `module/menu.js`, `templates/patrol_menu.html`, `css/foundry-menu.scss` |
+| Keybindings | `module/keys.js` |
+| Vision/speech/audio reactions | `module/vision.js`, `module/speech.js`, `module/audio.js` |
+| Layer registration / hooks | `module/foundry-patrol.js`, `module/util.js` |
+| User-facing behavior docs | `README.md` |
