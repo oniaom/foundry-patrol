@@ -52,6 +52,20 @@ function clientToWorld(event) {
 // events, because it only needs the DOM event + the stage transform.
 // ---------------------------------------------------------------------------
 
+// True when the token's footprint covers the world point: prefer the placeable's
+// world-space bounds, fall back to its document rectangle in grid cells.
+function tokenContainsPoint(token, world, g) {
+    const bounds = token.bounds;
+    if (bounds && typeof bounds.contains === "function") return bounds.contains(world.x, world.y);
+    const doc = token.document ?? token;
+    const x0 = doc.x ?? 0;
+    const y0 = doc.y ?? 0;
+    return (
+        world.x >= x0 && world.x <= x0 + (doc.width ?? 1) * g &&
+        world.y >= y0 && world.y <= y0 + (doc.height ?? 1) * g
+    );
+}
+
 // Returns the token (if any) under the given world point. A press that lands on a
 // token belongs to Foundry's token layer (select / drag / context menu), so the
 // patrol-point handler must leave it alone.
@@ -65,30 +79,10 @@ function tokenAtWorldPoint(world) {
     // this spot (e.g. the token was moved under a stationary cursor). Only applies
     // while the token layer is the active layer, so other tools can still reach
     // points that happen to sit under a token.
-    const tokensActive = canvas?.activeLayer === tokenLayer || tokenLayer.active === true;
-    if (!tokensActive) return null;
-    const placeables = tokenLayer.placeables ?? tokenLayer.objects?.children ?? [];
+    if (canvas?.activeLayer !== tokenLayer && tokenLayer.active !== true) return null;
     const g = gridSize();
-    for (const token of placeables) {
-        if (!token || token.visible === false) continue;
-        const bounds = token.bounds;
-        if (bounds && typeof bounds.contains === "function") {
-            if (bounds.contains(world.x, world.y)) return token;
-            continue;
-        }
-        const doc = token.document ?? token;
-        const x0 = doc.x ?? 0;
-        const y0 = doc.y ?? 0;
-        if (
-            world.x >= x0 &&
-            world.x <= x0 + (doc.width ?? 1) * g &&
-            world.y >= y0 &&
-            world.y <= y0 + (doc.height ?? 1) * g
-        ) {
-            return token;
-        }
-    }
-    return null;
+    const placeables = tokenLayer.placeables ?? tokenLayer.objects?.children ?? [];
+    return placeables.find((token) => token && token.visible !== false && tokenContainsPoint(token, world, g)) ?? null;
 }
 
 let boundView = null;
