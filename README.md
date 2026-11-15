@@ -12,8 +12,8 @@ Using this mod, you will be able to set up "Patrol Routes" which tokens will mov
 
 ### WARNING (READ)
 
-**Mod Incompatabilities:**
-1. Search Anywhere (A solution will be out soon!)
+**Mod Incompatabilities from the original fork, not actually checked against latest version:**
+1. Search Anywhere
 2. Any module similar to above.
 
 A lot of these features use calculations that may or may not be overwhelming to your computer. Please keep this in mind when using quotes/vision/audio with several tokens on one scene.
@@ -25,13 +25,11 @@ If your computer is capable of handling all the weight, by all means, please go 
 -   Requires Foundry VTT V13 or later (verified on V14)
 -   No known module incompatibilities.
 
-### IMPORTANT / BUGS
+### IMPORTANT / BUGS (from the original fork, not actually checked against latest version)
 
 **Remember to back up your world before using mods**
 
-Bugs are inevitable, despite my best efforts to remove all that I could find. Especially because this update is adding a bunch of new features! If you happen to locate any or if something doesn't appear to work as intended, please don't hesitate to contact me on Discord at (JacobMcAuley#3461). I will correct the issue and push it out as soon as possible.
-
-That being said here are all the known issues at the moment:
+Here are all the known issues at the moment:
 
 1. Group selecting tokens for deletion while patrolling is active _sometimes_ results in an error message occuring. Hit F5 to refresh to fix.
 2. Games with two or more GM or assistant permissions will find unexpected behavior.
@@ -136,10 +134,6 @@ This menu can be disabled with settings!
 Watch the video:
 [![Watch the video](https://img.youtube.com/vi/TVwJ2LL8zas/maxresdefault.jpg)](https://www.youtube.com/watch?v=TVwJ2LL8zas)
 
-### Feedback
-
-If you have any suggestions, please let me know on discord! (JacobMcAuley#3461)
-
 ### Attributions
 
 Azzurite's setting extender provided the necessary tools to allow for keybinding.
@@ -149,13 +143,4 @@ Normal Walk found at: https://www.iconfinder.com/icons/2639849/chart_line_icon
 
 ### Special Thanks
 
-Super special thanks to Bazoop on discord! He was a willing participant to bad code. This special gratitude is also given to Cris
-#6864 on Discord. Their feedback on bugs and issues helped to refine Token Patrol.
-
-Special thanks to: Felix, Jasaplay, Moerill, Gen Kitty, Guaccamole, errational, and any others I missed for providing much needed feedback.
-
-# Donations
-
-If you liked this project and want to support future ones, consider donating!
-This module and all previous and future modules, as always, will be free to use and download. Any donations are warmly received and appreciated!
-[![paypal](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_donations&business=723SW7WMD8YR6&item_name=Thank+you+for+your+tip%21&currency_code=USD&source=url)
+Special thanks to the original author of this mod, JacobMcAuley
