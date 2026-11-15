@@ -8,6 +8,12 @@ export function routesLayer() {
     // Foundry v13+ keeps the active layers in canvas.layers as an Array of instances,
     // so the old keyed lookup (canvas.layers.patrolRoutes) no longer resolves.
     const layers = canvas?.layers;
-    if (Array.isArray(layers)) return layers.find((layer) => layer instanceof RoutesLayer) ?? null;
-    return layers?.patrolRoutes ?? canvas?.patrolRoutes ?? null;
+    if (Array.isArray(layers)) {
+        const found = layers.find((layer) => layer instanceof RoutesLayer);
+        if (found) return found;
+    } else if (layers?.patrolRoutes) {
+        return layers.patrolRoutes;
+    }
+    // Fallbacks: direct canvas property (v14 control `layer` lookup) and group property.
+    return canvas?.patrolRoutes ?? canvas?.primary?.patrolRoutes ?? null;
 }

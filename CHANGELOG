@@ -3,6 +3,10 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [3.2.2] - Bug fix
+### Bug Fixes:
+- Fixed patrol points still not being selectable/editable with the mouse on Foundry v13/v14, despite 3.2.1. Root cause: under PIXI v8, a canvas layer subtree is pruned from hit-testing when the layer is `"passive"` with `interactiveChildren === false` (the `CanvasLayer` default in v13), and a plain container without a `hitArea` is never a hit target itself — so the routes layer never received pointer events and the layer-level fallback added in 3.2.1 was dead code. Edit mode now gives the layer a full-scene `hitArea`, sets `eventMode = "static"` and `interactiveChildren = true`, and re-asserts all of that after every layer redraw (canvas draws can reset layer flags), so clicking a point marker reliably selects it (ring + options popup), dragging moves it (snapped, persisted via `movePlotPoint`), and right-click deletes it. The Patrol Tool scene control now also provides the `order` field required by the v13/v14 control schema, selection is cleaned up on Escape/empty clicks and when a redraw removes the selected point, and pointer coordinates are read through v8 (`event.global`/`event.client`) with v7 (`event.data`) fallbacks.
+
 ## [3.2.1] - Bug fix
 ### Bug Fixes:
 - Fixed plot points never being selectable/editable with the Patrol Tool (the sidebar button appeared, but clicks on points did nothing): the patrol scene control is now associated with its layer (`layer: "patrolRoutes"`) so Foundry activates the routes layer when the tool is selected and dispatches canvas pointer events to it. Additionally, edit mode now makes the layer itself interactive and hit-tests points at the layer level (`RoutesLayer._handleLayerPointerDown` + `RouteDrawing.hitTestMarker`), so selection/drag/delete work even when per-object PIXI hit testing doesn't reach the markers; marker handlers call `stopPropagation()` to avoid double handling.
