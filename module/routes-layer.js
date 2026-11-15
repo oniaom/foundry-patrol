@@ -63,7 +63,8 @@ class RouteDrawing {
             const cx = point.x + GRID_SIZE;
             const cy = point.y + GRID_SIZE;
             const marker = new PIXI.Graphics();
-            marker.circle(cx, cy, radius).fill({ color: this.color, alpha: 0.9 }).stroke({ width: 2, color: 0xffffff, alpha: 0.8 });
+            this._drawCircle(marker, cx, cy, radius);
+            marker.fill({ color: this.color, alpha: 0.9 }).stroke({ width: 2, color: 0xffffff, alpha: 0.8 });
             marker.eventMode = "static";
             marker.hitArea = new PIXI.Circle(cx, cy, radius + 6);
             marker.cursor = "pointer";
@@ -73,6 +74,25 @@ class RouteDrawing {
             });
             this.markers.addChild(marker);
         });
+    }
+
+    // Graphics#circle() is not available on every PIXI build, so add the dot via
+    // drawShape()/arc() when present and fall back to a line-segment path otherwise.
+    _drawCircle(graphics, cx, cy, radius) {
+        if (typeof graphics.circle === "function") {
+            graphics.circle(cx, cy, radius);
+        } else if (typeof graphics.drawShape === "function") {
+            graphics.drawShape(new PIXI.Circle(cx, cy, radius));
+        } else if (typeof graphics.arc === "function") {
+            graphics.arc(cx, cy, radius, 0, Math.PI * 2);
+        } else {
+            const segments = 32;
+            graphics.moveTo(cx + radius, cy);
+            for (let i = 1; i <= segments; i++) {
+                const angle = (i / segments) * Math.PI * 2;
+                graphics.lineTo(cx + Math.cos(angle) * radius, cy + Math.sin(angle) * radius);
+            }
+        }
     }
 
     _drawDashedLine(offset) {
