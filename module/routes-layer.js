@@ -1,19 +1,98 @@
 import { MODULE } from "./config.js";
 import { TP } from "./tp.js";
-import { gridSize } from "./util.js";
+import { gridSize, routesLayer } from "./util.js";
 import { patrolToolState, showPointMenu, closePointMenu } from "./controls.js";
 
 const CanvasLayer = foundry.canvas.layers.CanvasLayer ?? globalThis.CanvasLayer;
 
-// PIXI v8 exposes pointer positions directly on the event (event.global / event.client);
-// v7-style event.data is a deprecated getter that returns the event itself, so both work.
-function eventGlobal(event) {
-    return event?.global ?? event?.data?.global ?? { x: 0, y: 0 };
-}
-
+// Normalizes client (screen) coordinates from either a PIXI federated event or a DOM event.
 function eventClient(event) {
     if (event?.client && typeof event.client.x === "number") return event.client;
     return { x: event?.clientX ?? 0, y: event?.clientY ?? 0 };
+}
+
+// Normalizes world (scene) coordinates from either a PIXI federated event or a DOM event.
+function eventGlobal(event) {
+    return event?.global ?? event?.data?.global ?? null;
+}
+
+// Converts a DOM pointer event on the canvas element into scene/world coordinates.
+// PIXI hit-testing is deliberately not relied upon for point picking (layer
+// eventMode/interactiveChildren behavior differs across Foundry/PIXI builds and
+// has proven unreliable), so we do the transform ourselves:
+// client px -> canvas bitmap px -> stage-local (world) via the stage transform.
+function clientToWorld(event) {
+    try {
+        const app = canvas?.app;
+        const view = app?.view ?? app?.canvas;
+        const stage = app?.stage;
+        if (!view || !stage || typeof stage.toLocal !== "function") return null;
+        const rect = typeof view.getBoundingClientRect === "function" ? view.getBoundingClientRect() : null;
+        const viewW = view.width || rect?.width || 1;
+        const viewH = view.height || rect?.height || 1;
+        const left = rect?.left ?? 0;
+        const top = rect?.top ?? 0;
+        const rectW = rect?.width || viewW;
+        const rectH = rect?.height || viewH;
+        const sx = ((event.clientX - left) * viewW) / rectW;
+        const sy = ((event.clientY - top) * viewH) / rectH;
+        const p = stage.toLocal({ x: sx, y: sy });
+        if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) return { x: p.x, y: p.y };
+    } catch (err) {
+        // fall through
+    }
+    return null;
+}
+
+// ---------------------------------------------------------------------------
+// DOM-level mouse interaction with the plotted patrol points.
+// A single pointerdown listener on the canvas element hit-tests every plotted
+// point (circle) and opens the edit popup / starts a drag / deletes the point.
+// This works regardless of which canvas layer is active or how PIXI dispatches
+// events, because it only needs the DOM event + the stage transform.
+// ---------------------------------------------------------------------------
+
+let boundView = null;
+
+/** Binds the canvas pointerdown handler (idempotent; re-binds if the canvas element was recreated). */
+export function registerCanvasPointInteraction() {
+    const view = canvas?.app?.view ?? canvas?.app?.canvas;
+    if (!view || typeof view.addEventListener !== "function") return;
+    if (boundView === view) return;
+    if (boundView) boundView.removeEventListener("pointerdown", onCanvasPointerDown);
+    boundView = view;
+    view.addEventListener("pointerdown", onCanvasPointerDown);
+}
+
+function onCanvasPointerDown(event) {
+    if (!game.user?.isGM) return;
+    if (event.button !== 0 && event.button !== 2) return;
+    const world = eventGlobal(event) ?? clientToWorld(event);
+    if (!world) return;
+    const layer = routesLayer();
+    if (layer) {
+        for (const drawing of layer._drawings) {
+            const hit = drawing.hitTestMarker(world.x, world.y);
+            if (!hit) continue;
+            if (event.button === 2) {
+                // right-click: delete the point immediately
+                layer.clearAllSelections();
+                TP.tokenPatroller?.removePlotPoint(drawing.tokenId, hit.index);
+            } else {
+                // left-click: select the point (ring + options popup) and arm a potential drag
+                drawing.beginMarkerDrag(hit.index, {
+                    clientX: event.clientX,
+                    clientY: event.clientY,
+                    global: world,
+                    button: event.button,
+                });
+            }
+            return;
+        }
+    }
+    // clicked empty space: drop the current selection and close the popup
+    if (layer) layer.clearAllSelections();
+    else closePointMenu();
 }
 
 export class RoutesLayer extends CanvasLayer {
@@ -30,13 +109,7 @@ export class RoutesLayer extends CanvasLayer {
         this._drawings = [];
         this.removeChildren().forEach((child) => child.destroy({ children: true }));
         this.visible = game.user.isGM;
-        // A plain container without a hitArea is never a hit-test target, which would make the
-        // layer-level pointer fallback below dead code. Give the layer a full-scene hit area;
-        // while edit mode is off the layer is still pruned (passive + interactiveChildren false).
-        const dims = canvas?.dimensions ?? canvas?.scene?.dimensions;
-        this.hitArea = new PIXI.Rectangle(0, 0, dims?.width ?? 4000, dims?.height ?? 4000);
         this.objects = this.addChild(new PIXI.Container());
-        this.objects.interactiveChildren = true;
         const routes = canvas.scene?.getFlag(MODULE, "routes") ?? {};
         for (const data of Object.values(routes)) {
             const drawing = new RouteDrawing(data, this);
@@ -44,9 +117,7 @@ export class RoutesLayer extends CanvasLayer {
             this.objects.addChild(drawing.graphics);
             this.objects.addChild(drawing.markers);
         }
-        // Redraws recreate all children and Foundry may reset layer flags during canvas draws,
-        // so re-assert the edit-mode interactivity and repair the current selection afterwards.
-        this.setEditMode(patrolToolState.active);
+        // Redraws recreate all children, so repair the current selection afterwards.
         this._restoreSelection();
     }
 
@@ -54,38 +125,6 @@ export class RoutesLayer extends CanvasLayer {
         for (const drawing of this._drawings) drawing.destroy();
         this._drawings = [];
         this.removeChildren().forEach((child) => child.destroy({ children: true }));
-    }
-
-    // Enables/disables patrol-point editing (markers become selectable/draggable).
-    // While active the layer itself is interactive (eventMode "static" + full-scene
-    // hitArea + interactiveChildren), because PIXI v8 prunes any subtree whose
-    // container is "passive" with interactiveChildren === false — and Foundry's
-    // CanvasLayer defaults interactiveChildren to false, which is why the markers
-    // were never hit-tested before.
-    setEditMode(active) {
-        if (active) {
-            if (this._savedEventMode === undefined) {
-                this._savedEventMode = this.eventMode ?? "passive";
-                this._savedInteractiveChildren = this.interactiveChildren ?? false;
-            }
-            this.interactive = true; // v7 alias; on v8 it maps back onto eventMode
-            this.eventMode = "static"; // set last so it wins over the deprecated alias
-            this.interactiveChildren = true;
-            if (!this._editHandlerBound) {
-                this._editHandler = (event) => this._handleLayerPointerDown(event);
-                this.on("pointerdown", this._editHandler);
-                this._editHandlerBound = true;
-            }
-        } else {
-            this.interactive = false;
-            this.eventMode = this._savedEventMode ?? "passive"; // set last so it wins over the deprecated alias
-            this.interactiveChildren = this._savedInteractiveChildren ?? false;
-            if (this._editHandlerBound) {
-                this.off("pointerdown", this._editHandler);
-                this._editHandlerBound = false;
-            }
-        }
-        for (const drawing of this._drawings) drawing.setEditMode(active);
     }
 
     // Drops the current selection on every route and closes the options popup.
@@ -116,35 +155,14 @@ export class RoutesLayer extends CanvasLayer {
         const half = gridSize() / 2;
         drawing._drawSelection(point.x + half, point.y + half);
     }
-
-    // Layer-level hit-testing fallback: works even when per-object hit testing
-    // doesn't reach the markers in the current PIXI build. The marker handlers
-    // call stopPropagation(), so this only sees events the markers didn't consume.
-    _handleLayerPointerDown(event) {
-        if (!patrolToolState.active) return;
-        if (event.button !== 0 && event.button !== 2) return;
-        const g = eventGlobal(event);
-        for (const drawing of this._drawings) {
-            const hit = drawing.hitTestMarker(g.x, g.y);
-            if (!hit) continue;
-            if (event.button === 2) {
-                TP.tokenPatroller?.removePlotPoint(drawing.tokenId, hit.index);
-            } else {
-                drawing.beginMarkerDrag(hit.index, event);
-            }
-            return;
-        }
-        // clicked empty space: drop the current selection
-        this.clearAllSelections();
-    }
 }
 
 /**
  * Draws the animated dashed line that visualizes a single token's patrol route,
- * plus a marker at every plotted point. When the Patrol Tool edit mode is active
- * the markers are interactive: left-click selects a point (options popup), dragging
- * moves it, right-click deletes it. Drawing supports both PIXI v8 (fill()/stroke())
- * and v7 (lineStyle()/beginFill()) styling APIs.
+ * plus a marker circle at every plotted point. Clicking a point circle (handled
+ * at the DOM level, see registerCanvasPointInteraction) selects it (options popup:
+ * delete / move), dragging moves it, right-click deletes it. Drawing supports both
+ * PIXI v8 (fill()/stroke()) and v7 (lineStyle()/beginFill()) styling APIs.
  */
 class RouteDrawing {
     constructor(data, layer) {
@@ -158,7 +176,6 @@ class RouteDrawing {
         this.tokenId = data.tokenId;
         this.graphics = new PIXI.Graphics();
         this.markers = new PIXI.Container();
-        this.markers.interactiveChildren = true;
         this.selection = new PIXI.Graphics();
         this._markerEls = [];
         this._markerRadius = Math.max(8, gridSize() / 6);
@@ -171,42 +188,18 @@ class RouteDrawing {
     _drawMarkers() {
         const GRID_SIZE = gridSize() / 2;
         const radius = this._markerRadius;
-        const editable = patrolToolState.active;
         this.points.forEach((point, index) => {
             const cx = point.x + GRID_SIZE;
             const cy = point.y + GRID_SIZE;
             const marker = new PIXI.Graphics();
             this._drawMarkerDot(marker, cx, cy, radius);
-            marker.interactive = editable; // PIXI v7-style flag; on v8 it maps back onto eventMode
-            marker.eventMode = editable ? "static" : "none"; // set last so it wins over the deprecated alias
-            marker.hitArea = new PIXI.Circle(cx, cy, radius + 6);
-            marker.cursor = "pointer";
-            marker.on("pointerdown", (event) => {
-                if (!patrolToolState.active) return;
-                event.stopPropagation?.(); // keep the layer-level fallback from double-handling
-                if (event.button === 2) {
-                    // right-click: quick delete
-                    TP.tokenPatroller?.removePlotPoint(this.tokenId, index);
-                    return;
-                }
-                if (event.button !== 0) return;
-                this.beginMarkerDrag(index, event);
-            });
             this._markerEls.push(marker);
             this.markers.addChild(marker);
         });
     }
 
-    setEditMode(active) {
-        for (const marker of this._markerEls) {
-            marker.interactive = active; // v7 alias; on v8 it maps back onto eventMode
-            marker.eventMode = active ? "static" : "none"; // set last so it wins
-        }
-        if (!active) this.clearSelection();
-    }
-
-    // Distance-based hit test of the plotted points (canvas coordinates), used by
-    // the layer-level pointer fallback in RoutesLayer._handleLayerPointerDown.
+    // Distance-based hit test of the plotted points (scene coordinates), used by
+    // the DOM-level pointer handler in onCanvasPointerDown.
     hitTestMarker(gx, gy) {
         const half = gridSize() / 2;
         for (let index = 0; index < this.points.length; index++) {
@@ -249,13 +242,13 @@ class RouteDrawing {
         }
     }
 
-    // pointerdown on a marker (directly or via the layer fallback): select it and
-    // start a potential drag. A plain click leaves the selection + options menu;
-    // moving the pointer drags the point.
+    // pointerdown on a point circle (from the DOM handler): select it and start a
+    // potential drag. A plain click leaves the selection + options menu; moving the
+    // pointer drags the point.
     beginMarkerDrag(index, event) {
         const marker = this._markerEls[index];
         if (!marker) return;
-        const startGlobal = eventGlobal(event);
+        const startGlobal = eventGlobal(event) ?? { x: 0, y: 0 };
         const startClient = eventClient(event);
         this._selectPoint(index, startClient.x, startClient.y);
         const drag = { marker, index, startGlobal, startClient, dragging: false };
@@ -290,7 +283,6 @@ class RouteDrawing {
         const cy = point.y + half;
         drag.marker.clear();
         this._drawMarkerDot(drag.marker, cx, cy, this._markerRadius);
-        drag.marker.hitArea = new PIXI.Circle(cx, cy, this._markerRadius + 6);
         this._drawSelection(cx, cy);
         this._render();
     }

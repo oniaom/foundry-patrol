@@ -2,12 +2,10 @@ import { TP } from "./tp.js";
 import { routesLayer } from "./util.js";
 
 /**
- * Shared state for the "Patrol Tool" scene control. When `active`, the plotted
- * point markers on the routes layer are interactive: click one to select it
- * (options popup with delete), drag it to move it, right-click to delete.
+ * Shared state for patrol-point selection. `selected` is the
+ * { tokenId, index } of the currently selected plot point.
  */
 export const patrolToolState = {
-    active: false,
     selected: null, // { tokenId, index } of the currently selected plot point
 };
 
@@ -33,8 +31,9 @@ export function closePointMenu() {
 }
 
 /**
- * Shows the small options popup for a selected plot point, anchored at the
- * pointer's client position: delete the point, or drag it on the map to move it.
+ * Shows the small options popup for a clicked plot point, anchored at the
+ * pointer's client position: delete the point, or move it by dragging it on
+ * the map.
  */
 export function showPointMenu({ tokenId, index, clientX, clientY }) {
     closePointMenu();
@@ -70,64 +69,23 @@ export function showPointMenu({ tokenId, index, clientX, clientY }) {
         closePointMenu();
     });
 
+    const moveButton = document.createElement("button");
+    moveButton.type = "button";
+    moveButton.textContent = "Move point";
+    moveButton.addEventListener("click", () => {
+        // close the popup so it doesn't cover the map; the point can now be
+        // dragged directly (any press on the point circle arms a drag)
+        closePointMenu();
+    });
+
     const hint = document.createElement("div");
-    hint.textContent = "Drag the point on the map to move it.";
+    hint.textContent = "Or drag the point on the map to move it (snaps to grid). Right-click deletes.";
     hint.style.opacity = "0.8";
 
-    el.append(title, deleteButton, hint);
+    el.append(title, deleteButton, moveButton, hint);
     document.body.appendChild(el);
     menuEl = el;
 
     document.addEventListener("pointerdown", onDocumentPointerDown, true);
     document.addEventListener("keydown", onDocumentKeyDown);
-}
-
-/** Turns the Patrol Tool edit mode on/off and updates marker interactivity. */
-export function setPatrolEditMode(active) {
-    patrolToolState.active = !!active;
-    if (!patrolToolState.active) {
-        patrolToolState.selected = null;
-        closePointMenu();
-    }
-    const layer = routesLayer();
-    if (layer) {
-        layer.setEditMode(patrolToolState.active);
-        if (!patrolToolState.active) layer.clearAllSelections();
-    }
-}
-
-/**
- * Registers the "Patrol Tool" scene control on the left toolbar (next to the
- * token/wall tools). Its single toggle tool activates patrol-point editing:
- * click a plotted point to select it (options popup), drag it to move it.
- */
-export function registerPatrolControl() {
-    Hooks.on("getSceneControlButtons", (controls) => {
-        if (!game.user.isGM) return;
-        const control = {
-            name: "patrol",
-            order: 100,
-            title: "Patrol Tool",
-            icon: "fas fa-route",
-            // v14 associates the control with the canvas layer of the same name so
-            // selecting the tool activates that layer; harmless where unsupported.
-            layer: "patrolRoutes",
-            visible: true,
-            activeTool: "edit",
-            tools: {
-                edit: {
-                    name: "edit",
-                    order: 1,
-                    title: "Edit patrol points (click a point to select/delete it, drag to move it)",
-                    icon: "fas fa-map-marker-alt",
-                    toggle: true,
-                    active: patrolToolState.active,
-                    onChange: (_event, active) => setPatrolEditMode(active),
-                },
-            },
-        };
-        // v13+ passes a Record keyed by control name; tolerate an array just in case.
-        if (Array.isArray(controls)) controls.push(control);
-        else controls.patrol = control;
-    });
 }
