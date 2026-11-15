@@ -18,7 +18,10 @@ function onDocumentPointerDown(event) {
 }
 
 function onDocumentKeyDown(event) {
-    if (event.key === "Escape") closePointMenu();
+    if (event.key === "Escape") {
+        routesLayer()?.clearAllSelections();
+        closePointMenu();
+    }
 }
 
 export function closePointMenu() {
@@ -86,7 +89,11 @@ export function setPatrolEditMode(active) {
         patrolToolState.selected = null;
         closePointMenu();
     }
-    routesLayer()?.setEditMode(patrolToolState.active);
+    const layer = routesLayer();
+    if (layer) {
+        layer.setEditMode(patrolToolState.active);
+        if (!patrolToolState.active) layer.clearAllSelections();
+    }
 }
 
 /**
@@ -97,19 +104,20 @@ export function setPatrolEditMode(active) {
 export function registerPatrolControl() {
     Hooks.on("getSceneControlButtons", (controls) => {
         if (!game.user.isGM) return;
-        controls.patrol = {
+        const control = {
             name: "patrol",
+            order: 100,
             title: "Patrol Tool",
             icon: "fas fa-route",
-            // Associating the control with the routes layer makes Foundry activate
-            // that layer when the tool is selected, so canvas pointer events are
-            // dispatched to it (without this the markers are never hit-tested).
+            // v14 associates the control with the canvas layer of the same name so
+            // selecting the tool activates that layer; harmless where unsupported.
             layer: "patrolRoutes",
             visible: true,
             activeTool: "edit",
             tools: {
                 edit: {
                     name: "edit",
+                    order: 1,
                     title: "Edit patrol points (click a point to select/delete it, drag to move it)",
                     icon: "fas fa-map-marker-alt",
                     toggle: true,
@@ -118,5 +126,8 @@ export function registerPatrolControl() {
                 },
             },
         };
+        // v13+ passes a Record keyed by control name; tolerate an array just in case.
+        if (Array.isArray(controls)) controls.push(control);
+        else controls.patrol = control;
     });
 }

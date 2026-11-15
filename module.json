@@ -2,7 +2,7 @@
     "id": "foundry-patrol",
     "title": "Foundry Token Patroller",
     "description": "Give your tokens the ability to navigate automatically by selecting patrol points.",
-    "version": "3.2.1",
+    "version": "3.2.2",
     "authors": [
         {
             "name": "Jacob McAuley"
