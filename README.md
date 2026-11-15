@@ -131,8 +131,6 @@ This menu can be disabled with settings!
 ![example_picture1](imgs/examples/example1.png)
 ![example_picture2](imgs/examples/example2.png)
 
-Watch the video:
-[![Watch the video](https://img.youtube.com/vi/TVwJ2LL8zas/maxresdefault.jpg)](https://www.youtube.com/watch?v=TVwJ2LL8zas)
 
 ### Attributions
 
