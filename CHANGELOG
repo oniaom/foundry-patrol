@@ -3,6 +3,12 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
+## [3.3.0] - Patrol Tool scene control (start/stop all patrols)
+### Added:
+- New **Patrol Tool** scene control on the left sidebar (route icon, GM only) with two buttons: **Start all patrols** (play icon) and **Stop all patrols** (stop icon). They run the exact same actions as the Ctrl+Shift+G / Ctrl+Shift+H keybindings — start/halt the patrols of the selected tokens, or of all owned tokens when nothing is selected — so the GM no longer needs the keyboard shortcuts. Implemented in the new `module/scene-control.js`, which reuses the exported `startAllRoutes`/`haltAllRoutes` handlers from `keys.js`. Point picking/editing on the map stays DOM-level and always available, independent of this control.
+### Changed:
+- `registerPatrolControl()` in `module/scene-control.js` split into single-responsibility pieces: a `PATROL_TOOLS` data table (name/title/icon/handler, like `KEYBINDINGS` in `keys.js`), `buildTools()` and `buildPatrolControl()` builders (a fresh control object per hook call, since Foundry may mutate what it receives), `addSceneControl()` for the v13 Record-vs-array insertion, and `registerPatrolControl()` reduced to just hook wiring + the GM guard. No behavior change.
+
 ## [3.2.5] - Internal refactor (no functionality change)
 ### Changed:
 - Refactored the modules under `module/` for single-responsibility and less duplication, with no behavior change: the walking loop moved from `patroller.js` to `patrol-engine.js`, grid-path math to `linear-routes.js`, delay-string parsing to `delay.js`, the per-token data schema to `schema.js`, DOM/PIXI event coordinate conversion to `coords.js`, PIXI v7/v8 graphics helpers to `pixi-compat.js`, and DOM-level point picking to `point-interaction.js`. `store.js` is now the single owner of the scene flags, `patroller.js` keeps the public `TP.tokenPatroller` API and only coordinates (mutate -> persist -> redraw), and the ~16 identical one-line getters are generated from a table. `hud.js`/`menu.js`/`keys.js`/`vision.js`/`speech.js`/`controls.js`/`config.js` were de-duplicated (button factories, tab/setting tables, shared helpers). Verified by syntax-checking every file plus a mocked behavioral harness: identical side-effect logs between the old and new code across PIXI v8 and v7 drawing paths. Not run in a live Foundry client.

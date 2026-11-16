@@ -42,6 +42,7 @@ module/
   coords.js            event/PIXI coordinate normalization + clientToWorld conversion
   pixi-compat.js       PIXI v7/v8 Graphics helpers (circle path, fill/stroke ordering)
   controls.js          selection state + point popup menu + delete-route dialog
+  scene-control.js     Patrol Tool scene control (sidebar): start/stop-all-patrols buttons (registerPatrolControl)
   hud.js               token HUD buttons (add point, delete, start/stop, linear, menu)
   menu.js              PatrolMenu FormApplication (templates/patrol_menu.html)
   keys.js              GM keybindings (start/stop/add/clear/macro)
@@ -85,7 +86,7 @@ ARCHITECTURE.md      codebase map — read with this file, keep in sync
 
 ## Conventions
 
-- **Every change bumps the version** in `module.json` and gets a `CHANGELOG` entry
+- **Every change bumps the version except when working on updating/changing the same pull request** in `module.json` and gets a `CHANGELOG` entry
   (Keep a Changelog format, newest on top). This is strictly followed in git history.
 - **PRs:** branch from `master` named `fix/...` or `feat/...`, one logical change per
   PR. In this session, local `git commit`/`git push` may be blocked by policy — use
@@ -113,6 +114,10 @@ ARCHITECTURE.md      codebase map — read with this file, keep in sync
 | Token HUD buttons | `module/hud.js` |
 | Patrol Menu form | `module/menu.js`, `templates/patrol_menu.html`, `css/foundry-menu.scss` |
 | Keybindings | `module/keys.js` |
+| Scene control (sidebar Patrol Tool buttons) | `module/scene-control.js` |
 | Vision/speech/audio reactions | `module/vision.js`, `module/speech.js`, `module/audio.js` |
 | Layer registration / hooks / canvas lookups | `module/foundry-patrol.js`, `module/util.js` |
 | User-facing behavior docs | `README.md` |
+
+# Important
+The code is yours, you have full authority over it and you will keep maintaining it in the future. Do as you see is best fit.

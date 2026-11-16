@@ -46,6 +46,7 @@ Every plotted point dot is directly clickable on the map — no toolbar tool nee
 ### Starting / stopping a patrol
 
 - Click the **walking icon** (Start route) to make the token walk its route. The icon switches to a stop icon — click it to halt.
+- Or use the **Patrol Tool** in the left sidebar (route icon, GM only): **Start all patrols** (play icon) starts every patrol on the scene and **Stop all patrols** (stop icon) halts them — the same actions as the keybindings below, no keyboard needed. If tokens are selected, only those are affected; otherwise all owned tokens are.
 - The **text field** next to it sets the delay (in seconds) between points, e.g. `2` or `1, 4, 2` or `1-5`.
 - The **recycle / arrows icon** toggles between *Cycle Mode* (loop the route) and *Forwards-Backwards Mode* (walk the route and then back).
 - The **line / linear icon** toggles *Plot Walk* vs *Linear Walk* (square grids only — fills in the grid spaces between points so diagonal movement looks like a straight line).

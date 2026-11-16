@@ -11,12 +11,14 @@ function forEachAffectedToken(fn) {
     for (const token of affectedTokens()) fn(token);
 }
 
-function startAllRoutes() {
+// Exported so the Patrol Tool scene control (scene-control.js) can offer the
+// same actions as buttons, not just as keybindings.
+export function startAllRoutes() {
     forEachAffectedToken((token) => TP.tokenPatroller?.startPatrol(undefined, token.id));
     ui.notifications.info("Routes started for this scene");
 }
 
-function haltAllRoutes() {
+export function haltAllRoutes() {
     forEachAffectedToken((token) => TP.tokenPatroller?._disableWalking(token));
     ui.notifications.info("Routes halted for this scene");
 }
