@@ -139,8 +139,11 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
   **Patrol Tool** sidebar button (route icon) with two momentary buttons —
   **Start all patrols** / **Stop all patrols** — that call the exported
   `startAllRoutes`/`haltAllRoutes` from `keys.js`, i.e. exactly the
-  start/stop-all keybindings, reachable by mouse. No `layer` association: point
-  picking is DOM-level and must not switch the active canvas layer.
+  start/stop-all keybindings, reachable by mouse. Tools are flagged `button: true`
+  (v13/v14 only fire `onClick` for button tools) and the control keeps
+  `activeTool: ""` so opening it never triggers an action. No `layer`
+  association: point picking is DOM-level and must not switch the active
+  canvas layer.
 
 ## Reactions while patrolling
 

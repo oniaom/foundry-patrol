@@ -80,6 +80,10 @@ ARCHITECTURE.md      codebase map — read with this file, keep in sync
   (render cache synced by `TokenPatrollerManager._syncRoutesFlag`). Never add new
   storage without updating `ARCHITECTURE.md`.
 - Route rendering is **GM-only** (`RoutesLayer._draw` sets `visible = game.user.isGM`).
+- **Scene-control tools need `button: true` for `onClick` in v13/v14.** Without it the
+  click only moves `activeTool` and the handler fires late, on the next control
+  activation. Keep `activeTool: ""` on the control so opening it never fires a tool.
+  See `module/scene-control.js`.
 - After any mutation of plot points call `livePlotUpdate()` (syncs the `routes` flag
   and redraws the layer). The layer's `_draw()` recreates all children, so any
   per-frame/selection state must be re-applied there (`_restoreSelection()`).
