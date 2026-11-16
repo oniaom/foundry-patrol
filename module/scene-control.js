@@ -8,11 +8,18 @@ const PATROL_TOOLS = [
     ["stop", "Stop all patrols on this scene (selected tokens, or all owned tokens)", "fas fa-stop", () => haltAllRoutes()],
 ];
 
-/** Builds the tool map (keyed by tool name, with order) from the PATROL_TOOLS table. */
+/**
+ * Builds the tool map (keyed by tool name, with order) from the PATROL_TOOLS table.
+ * Every tool gets `button: true`: in Foundry v13/v14 a tool's `onClick` only fires
+ * on an actual button click when the tool is flagged as a button. Without it the
+ * click just moves `activeTool` and the handler fires late — on the next control
+ * activation — which is exactly the "nothing happens until I click another tool"
+ * bug. All Patrol Tool actions are momentary, so all tools are buttons.
+ */
 function buildTools() {
     const tools = {};
     PATROL_TOOLS.forEach(([name, title, icon, onClick], index) => {
-        tools[name] = { name, order: index + 1, title, icon, onClick };
+        tools[name] = { name, order: index + 1, title, icon, button: true, onClick };
     });
     return tools;
 }
@@ -46,7 +53,8 @@ function addSceneControl(controls, control) {
  * Registers the "Patrol Tool" scene control on the left sidebar (route icon,
  * GM only): two momentary buttons — start all patrols / stop all patrols — so
  * the GM can trigger the keybinding actions with the mouse. Only wires the
- * hook; the control itself is built by buildPatrolControl().
+ * hook; the control itself is built by buildPatrolControl(). `activeTool` stays
+ * empty so that merely opening the control never fires a tool's onClick.
  */
 export function registerPatrolControl() {
     Hooks.on("getSceneControlButtons", (controls) => {
