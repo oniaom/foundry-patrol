@@ -6,6 +6,7 @@ import { TokenHud } from "./hud.js";
 import { RoutesLayer } from "./routes-layer.js";
 import { registerCanvasPointInteraction } from "./point-interaction.js";
 import { registerKeybindings } from "./keys.js";
+import { registerPatrolControl } from "./scene-control.js";
 import { VisionHandler } from "./vision.js";
 import { SpeechHandler } from "./speech.js";
 import { AudioHandler } from "./audio.js";
@@ -34,6 +35,7 @@ function registerHandlebarsHelpers() {
 function onInit() {
     registerSettings();
     registerKeybindings();
+    registerPatrolControl();
     registerHandlebarsHelpers();
     CONFIG.Canvas.layers.patrolRoutes = { layerClass: RoutesLayer, group: "primary" };
     // Clicking a plotted point circle (delete / move options) is handled at the

@@ -29,6 +29,7 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
 
 - Exposes the global `TP` (`tp.js` is just `export const TP = {}`).
 - `Hooks.once("init")`: registers settings (`config.js`), keybindings (`keys.js`),
+  the Patrol Tool scene control (`scene-control.js` → `registerPatrolControl()`),
   Handlebars helpers, the custom canvas layer
   (`CONFIG.Canvas.layers.patrolRoutes = { layerClass: RoutesLayer, group: "primary" }`),
   and `Hooks.on("canvasReady", registerCanvasPointInteraction)` — the DOM-level
@@ -134,6 +135,12 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
 - **Keybindings** (`keys.js`, GM, Ctrl+Shift+…): start/stop all, add plot point for
   selected tokens, clear routes, generate a macro. They call the same
   `TP.tokenPatroller` API.
+- **Scene control** (`scene-control.js`, `getSceneControlButtons`, GM only): the
+  **Patrol Tool** sidebar button (route icon) with two momentary buttons —
+  **Start all patrols** / **Stop all patrols** — that call the exported
+  `startAllRoutes`/`haltAllRoutes` from `keys.js`, i.e. exactly the
+  start/stop-all keybindings, reachable by mouse. No `layer` association: point
+  picking is DOM-level and must not switch the active canvas layer.
 
 ## Reactions while patrolling
 
@@ -150,7 +157,8 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
 ## Import graph (who imports whom)
 
 ```
-foundry-patrol.js ──► config, tp, store, patroller, hud, routes-layer, point-interaction, keys, vision, speech, audio, util
+foundry-patrol.js ──► config, tp, store, patroller, hud, routes-layer, point-interaction, keys, scene-control, vision, speech, audio, util
+scene-control.js ──► keys (startAllRoutes/haltAllRoutes)
 patroller.js ──────► tp, util, schema, delay, linear-routes, patrol-engine, routes-layer (routesFromTokenMap), controls (dialog)
 patrol-engine.js ──► config, tp, util
 linear-routes.js ──► (leaf, no module imports)
