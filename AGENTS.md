@@ -86,7 +86,7 @@ ARCHITECTURE.md      codebase map — read with this file, keep in sync
 
 ## Conventions
 
-- **Every change bumps the version** in `module.json` and gets a `CHANGELOG` entry
+- **Every change bumps the version except when working on updating/changing the same pull request** in `module.json` and gets a `CHANGELOG` entry
   (Keep a Changelog format, newest on top). This is strictly followed in git history.
 - **PRs:** branch from `master` named `fix/...` or `feat/...`, one logical change per
   PR. In this session, local `git commit`/`git push` may be blocked by policy — use

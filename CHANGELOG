@@ -3,13 +3,11 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
-## [3.3.1] - Internal refactor (no functionality change)
-### Changed:
-- Split `registerPatrolControl()` in `module/scene-control.js` into single-responsibility pieces: a `PATROL_TOOLS` data table (name/title/icon/handler, like `KEYBINDINGS` in `keys.js`), `buildTools()` and `buildPatrolControl()` builders (a fresh control object per hook call, since Foundry may mutate what it receives), `addSceneControl()` for the v13 Record-vs-array insertion, and `registerPatrolControl()` reduced to just hook wiring + the GM guard. No behavior change.
-
 ## [3.3.0] - Patrol Tool scene control (start/stop all patrols)
 ### Added:
 - New **Patrol Tool** scene control on the left sidebar (route icon, GM only) with two buttons: **Start all patrols** (play icon) and **Stop all patrols** (stop icon). They run the exact same actions as the Ctrl+Shift+G / Ctrl+Shift+H keybindings — start/halt the patrols of the selected tokens, or of all owned tokens when nothing is selected — so the GM no longer needs the keyboard shortcuts. Implemented in the new `module/scene-control.js`, which reuses the exported `startAllRoutes`/`haltAllRoutes` handlers from `keys.js`. Point picking/editing on the map stays DOM-level and always available, independent of this control.
+### Changed:
+- `registerPatrolControl()` in `module/scene-control.js` split into single-responsibility pieces: a `PATROL_TOOLS` data table (name/title/icon/handler, like `KEYBINDINGS` in `keys.js`), `buildTools()` and `buildPatrolControl()` builders (a fresh control object per hook call, since Foundry may mutate what it receives), `addSceneControl()` for the v13 Record-vs-array insertion, and `registerPatrolControl()` reduced to just hook wiring + the GM guard. No behavior change.
 
 ## [3.2.5] - Internal refactor (no functionality change)
 ### Changed:
