@@ -7,7 +7,7 @@ Give your tokens the ability to navigate automatically by selecting patrol point
 ## Features
 
 ### Patrol points
-Add patrol points to visually plot routes
+Add patrol points to visually plot routes (where the token will move)
 
 ![](imgs/examples/patrol-points.webp)
 
