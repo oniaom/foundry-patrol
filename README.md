@@ -33,7 +33,7 @@ This mode requires that Token Vision is enabled, including setting the sight on 
 
 You can use the keyword {token.name} within your single quotes to substitute the first seen token within. See the image below!
 
-Note: The single quote ---> ' is used as the delimiting factor in seeing quotes. So if you put a quote like 'This isn ' t fair!' an error will be thrown, as the parser would break this into {'This isn', 't fair <--- ERROR NO ENDING}
+Note: The single quote `'` is used as the delimiting factor in seeing quotes. So if you put a quote like `This isn ' t fair!` an error will be thrown, as the parser would break this into {'This isn', 't fair <--- ERROR NO ENDING}
 
 ![](imgs/examples/tokenQuotes.png)
 
