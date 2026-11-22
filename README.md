@@ -4,6 +4,40 @@
 
 Give your tokens the ability to navigate automatically by selecting patrol points. Plot a route for a token, press start, and it walks the route on its own — great for patrolling guards, wandering monsters, market crowds, and more.
 
+## Features
+
+### Patrol points
+Add patrol points to visually plot routes
+
+![](imgs/examples/patrol-points.webp)
+
+### Token options
+Start movement, add points, etc.
+
+![](imgs/examples/token-rightclick.png)
+
+### Emit Audio
+Tokens can emit audio. Make your movements more life-like with walking sounds and more.
+
+![](imgs/examples/ambientAudio.png)
+
+### Speech
+Tokens can speak, and if they see an other token they can mention their name as well.
+
+#### Quotes
+With this setting, Patrolling tokens can make mentions towards NPCs and PCs depending on the enabled settings.
+
+This mode requires that Token Vision is enabled, including setting the sight on the token itself, and the corresponding quotes settings enabled. This can be seen more in detail by using the module and reading the hints.
+
+#### Quote Parsing
+
+You can use the keyword {token.name} within your single quotes to substitute the first seen token within. See the image below!
+
+Note: The single quote ---> ' is used as the delimiting factor in seeing quotes. So if you put a quote like 'This isn ' t fair!' an error will be thrown, as the parser would break this into {'This isn', 't fair <--- ERROR NO ENDING}
+
+![](imgs/examples/tokenQuotes.png)
+
+
 ## Requirements
 
 - Foundry VTT **V13 or later** (verified on V14)
