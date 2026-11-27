@@ -95,7 +95,6 @@ Configurable in *Configure Controls* → *Keybindings* under the module:
 | Start Routes | Ctrl+Shift+G | Start routes for selected tokens (or all owned tokens) |
 | Stop Routes | Ctrl+Shift+H | Halt those routes |
 | Add Plot Point | Ctrl+Shift+R | Add current position of each selected token as a point |
-| Clear Routes | Ctrl+Shift+D | Clear routes of selected (or all owned) tokens |
 | Generate Patrol Macro | Ctrl+Shift+M | Create a macro that starts the selected tokens' patrols |
 
 ## API
