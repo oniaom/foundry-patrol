@@ -24,6 +24,7 @@ export function createDefaultPatrolData() {
         isLinear: false,
         lastRecordedLocation: {},
         delayPeriod: [2000],
+        randomDelay: false, // true when delayPeriod is a randomized range pool (input contained a range like "1-3")
         isDeleted: false,
         audioId: null,
         audioLocal: true,

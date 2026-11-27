@@ -37,7 +37,7 @@ module/
   util.js              gridSize(), isSquareGrid(), sleep(), routesLayer() lookup helpers
   store.js             PatrolDataManager — the ONLY module touching scene flags (FLAGS keys)
   schema.js            default per-token patrol data schema (createDefaultPatrolData)
-  delay.js             delay string (seconds; dot-decimal floats, comma lists, ranges) <-> milliseconds (delayPeriod)
+  delay.js             delay string (seconds; dot-decimal floats, comma lists, randomized ranges in 0.5s steps) <-> milliseconds (delayPeriod + randomDelay flag)
   linear-routes.js     grid-path math for Linear Walk mode (pure functions)
   patroller.js         TokenPatrollerManager — tokenMap + plot/route CRUD + public API facade
   patrol-engine.js     PatrolEngine — the walking loop only (data via injected accessors)
@@ -90,6 +90,14 @@ ARCHITECTURE.md      codebase map — read with this file, keep in sync
   the delay string ("1,5" = delays 1s and 5s), so comma→dot auto-conversion is NOT
   done; the HUD delay field instead reverts invalid input to the previous value on
   blur (`change` listener in `hud.js`). Parsing lives in `delay.js`.
+- **A delay range ("1-3") means a RANDOMIZED delay**, not a per-point sequence: it
+  expands in 0.5s steps between the bounds ("1-3" → 1, 1.5, 2, 2.5, 3), is stored as
+  that pool in `delayPeriod` with `randomDelay: true` on the token's patrol data
+  (`schema.js`), and the engine picks a random entry on EVERY step via
+  `pickDelayPeriod()` in `delay.js` — even when the pool length happens to equal
+  the point count. Keep the flag persisted (JSON flags) so the behavior survives
+  reloads; HUD field and menu form display the pool back as "min-max"
+  (`isRangeExpansion`/`formatDelayForForm`).
 - **Patrol data is per-scene.** `tokenMap` is loaded from the viewed scene at
   `ready` and reloaded on every `canvasReady` for a *different* scene
   (`TokenPatrollerManager.reloadFromScene()` in `patroller.js`). Never persist

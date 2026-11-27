@@ -1,7 +1,7 @@
 import { TP } from "./tp.js";
 import { gridSize, routesLayer, isSquareGrid } from "./util.js";
 import { createDefaultPatrolData } from "./schema.js";
-import { normalizeDelayInput, delayToSeconds } from "./delay.js";
+import { normalizeDelayInput, delayToSeconds, hasDelayRange } from "./delay.js";
 import { generateLinearRoute, rebuildLinearPaths, segmentCount } from "./linear-routes.js";
 import { PatrolEngine } from "./patrol-engine.js";
 import { routesFromTokenMap } from "./routes-layer.js";
@@ -290,7 +290,9 @@ export class TokenPatrollerManager {
 
     /**
      * Parses a user-entered delay string (seconds) into milliseconds and stores
-     * it as the token's delayPeriod. Returns the stored delayPeriod, or
+     * it as the token's delayPeriod. When the input contains a range ("1-3"),
+     * the expanded pool is marked randomized via `randomDelay` (the patrol then
+     * picks a random value on every step). Returns the stored delayPeriod, or
      * undefined when the input was empty/invalid (nothing is stored then).
      */
     async _handleDelayPeriod(delay, tokenId) {
@@ -298,6 +300,7 @@ export class TokenPatrollerManager {
         if (!parsed || parsed.length == 0) return;
         if (this.tokenMap[tokenId]) {
             this.tokenMap[tokenId].delayPeriod = parsed;
+            this.tokenMap[tokenId].randomDelay = hasDelayRange(delay);
         }
         await this._saveAndUpdate(this.tokenMap);
         return this.tokenMap[tokenId]?.delayPeriod;

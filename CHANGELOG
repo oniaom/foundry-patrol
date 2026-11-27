@@ -1,13 +1,14 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
-## [3.5.0] - Floating point delays; right-click no longer deletes points
+## [3.5.0] - Floating point + randomized range delays; right-click no longer deletes points
 ### Added:
-- Move delay periods now accept floating point seconds: decimals use a dot, e.g. `1.5`, `1.5, 2.5` or `1.5-3` (ranges step by 1 from the start value). Works in both the HUD delay field and the Patrol Menu. Commas remain the list separator (`1,5` = the two delays 1s and 5s), never a decimal separator. In the HUD delay field, invalid input (letters, a second dot, empty) reverts to the previous value when you click out of the field; the Patrol Menu keeps the stored delays on invalid input.
+- Move delay periods now accept floating point seconds: decimals use a dot, e.g. `1.5`, `1.5, 2.5`. Works in both the HUD delay field and the Patrol Menu. Commas remain the list separator (`1,5` = the two delays 1s and 5s), never a decimal separator. In the HUD delay field, invalid input (letters, a second dot, empty) reverts to the previous value when you click out of the field; the Patrol Menu keeps the stored delays on invalid input.
+- Typing a **range** as the delay (e.g. `1-3`, `1.5-3`, `1-3.5`) now means a **randomized delay**: it expands to the bounds in 0.5s steps (`1-3` → 1, 1.5, 2, 2.5, 3) and the patrol picks one at random on every move instead of applying the values per point. The expanded pool is stored in `delayPeriod` with a `randomDelay` flag on the token's patrol data (survives reloads); the HUD field and the Patrol Menu show it back as `1-3` so re-submitting keeps the range.
 ### Removed:
 - Right-clicking a patrol point no longer deletes it (too easy to hit by accident). Left-click the point and choose **Delete point** in the popup instead; right-click on the canvas is left entirely to Foundry's own context menus.
 ### Fixed:
-- Delay ranges no longer duplicate the range's end value (`2-4` produced 2,3,4,4; now 2,3,4 as documented).
+- Delay ranges no longer duplicate the range's end value and now expand in 0.5s steps (`2-4` produced 2,3,4,4; now 2, 2.5, 3, 3.5, 4).
 
 ## [3.4.1] - Bug fix
 ### Fixed:

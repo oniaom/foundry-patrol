@@ -80,7 +80,7 @@ Every plotted point dot is directly clickable on the map — no toolbar tool nee
 
 - Click the **walking icon** (Start route) to make the token walk its route. The icon switches to a stop icon — click it to halt.
 - Or use the **Patrol Tool** in the left sidebar (route icon, GM only): **Start all patrols** (play icon) starts every patrol on the scene and **Stop all patrols** (stop icon) halts them — the same actions as the keybindings below, no keyboard needed. If tokens are selected, only those are affected; otherwise all owned tokens are.
-- The **text field** next to it sets the delay (in seconds) between points, e.g. `2`, `1.5`, `1, 4, 2` or `1-5`. Decimals use a dot (commas separate values); if the entered text is invalid, the field reverts to the previous value when you click out of it.
+- The **text field** next to it sets the delay (in seconds) between points, e.g. `2`, `1.5`, `1, 4, 2` or `1-5`. Decimals use a dot (commas separate values); if the entered text is invalid, the field reverts to the previous value when you click out of it. A **range** like `1-3` (also with decimals, e.g. `1.5-3` or `1-3.5`) is randomized: each move waits a random value between the bounds in 0.5s steps (`1`, `1.5`, `2`, `2.5`, `3`).
 - The **recycle / arrows icon** toggles between *Cycle Mode* (loop the route) and *Forwards-Backwards Mode* (walk the route and then back).
 - The **line / linear icon** toggles *Plot Walk* vs *Linear Walk* (square grids only — fills in the grid spaces between points so diagonal movement looks like a straight line).
 - The **caret icon** (right column) opens the full **Patrol Menu** with per-token settings: quotes, vision reactions, ambient audio, delay, rotation, language, and more.

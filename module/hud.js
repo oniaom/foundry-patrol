@@ -2,7 +2,7 @@ import { MODULE } from "./config.js";
 import { TP } from "./tp.js";
 import { PatrolMenu } from "./menu.js";
 import { isSquareGrid } from "./util.js";
-import { normalizeDelayInput } from "./delay.js";
+import { normalizeDelayInput, isRangeExpansion } from "./delay.js";
 
 /** Builds one HUD control icon (a div.control-icon wrapping an img/i element). */
 function makeIconButton(innerHtml, title) {
@@ -65,7 +65,13 @@ export class TokenHud {
             isLinear = !!patrolData.isLinear;
             isInverted = !!patrolData.inverted;
             const delays = await TP.tokenPatroller?.getDelayPeriod(tokenId);
-            if (delays && delays.length > 0) delayPeriod = delays.join(",");
+            if (delays && delays.length > 0) {
+                // A randomized range pool is shown back as its "min-max" range.
+                delayPeriod =
+                    patrolData.randomDelay && isRangeExpansion(patrolData.delayPeriod ?? [])
+                        ? `${delays[0]}-${delays[delays.length - 1]}`
+                        : delays.join(",");
+            }
         }
 
         const left = root.querySelector(".col.left") ?? root.querySelector(".left");

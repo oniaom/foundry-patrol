@@ -61,8 +61,9 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
   `TokenPatrollerManager.tokenMap[tokenId]` holds `plots` (array of `{x,y}`
   top-left of grid cell), `linearPath`, `countinousRoutes`,
   `endCountinousRoutes`, `isLinear`, `inverted`, `isWalking`, `lastPos`,
-  `lastRecordedLocation`, `delayPeriod` (ms array), `color`, quotes, vision/audio
-  settings, etc.
+  `lastRecordedLocation`, `delayPeriod` (ms array), `randomDelay` (true when
+  `delayPeriod` is a randomized range pool from an input like "1-3"), `color`,
+  quotes, vision/audio settings, etc.
 - `_syncRoutesFlag()` projects every token's `plots` into the scene flag `routes`
   via `routesFromTokenMap()` (routes-layer.js)
   (`{ tokenId: { points, dash, gap, offset, color, fb, tokenId } }`) — this is what
@@ -89,7 +90,10 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
 - `startPatrol` parses the delay string (`delay.js` → `_handleDelayPeriod`; seconds as ints or dot-decimals like `1.5`, comma lists, `-` ranges), then
   `PatrolEngine.start(token)` loops `_navigationCycle` → `_navigationLoop` over
   `plots` (or `linearPath`/`countinousRoutes` when `isLinear` on square grids),
-  sleeping `delayPeriod[iterator]`, moving the token via
+  sleeping `pickDelayPeriod(delayPeriod, randomDelay, iterator, points.length)`
+  (delay.js: per-point when the pool length matches the point count and the pool
+  is NOT a random range, else a random entry — a range like "1-3" expands in 0.5s
+  steps and is always picked randomly per step), moving the token via
   `token.document.update({x,y})`, then `speechHandler.handleSpeech`,
   `visionHandler.evaluateSight`, storing `lastPos`. Stops when `isWalking` flips
   false (stopPatrol, token moved manually (`_wasTokenMoved`), combat pause, etc.).
@@ -150,7 +154,7 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
 - **Token HUD** (`hud.js`, on `renderTokenHUD`): Add Point (map icon) →
   `addPlotPoint`; trash → `deleteProcess` dialog; recycle/arrows → `_setInverse`
   (cycle vs forwards-backwards); line/linear → `_setLinear`; walking →
-  `startPatrol`/`stopPatrol`; delay text field (seconds, dot-decimals like `1.5`; invalid input reverts to the previous value on blur); caret → `PatrolMenu` (menu.js +
+  `startPatrol`/`stopPatrol`; delay text field (seconds, dot-decimals like `1.5`; a range like `1-3` is a random delay in 0.5s steps, shown back as `1-3`; invalid input reverts to the previous value on blur); caret → `PatrolMenu` (menu.js +
   `templates/patrol_menu.html`), which writes back through
   `updateFormRelatedData`.
 - **Keybindings** (`keys.js`, GM, Ctrl+Shift+…): start/stop all, add plot point for
@@ -185,7 +189,7 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
 foundry-patrol.js ──► config, tp, store, patroller, hud, routes-layer, point-interaction, keys, scene-control, vision, speech, audio, util
 scene-control.js ──► keys (startAllRoutes/haltAllRoutes)
 patroller.js ──────► tp, util, schema, delay, linear-routes, patrol-engine, routes-layer (routesFromTokenMap), controls (dialog)
-patrol-engine.js ──► config, tp, util
+patrol-engine.js ──► config, tp, util, delay (pickDelayPeriod)
 linear-routes.js ──► (leaf, no module imports)
 delay.js ──────────► (leaf)
 schema.js ─────────► (leaf)
@@ -219,9 +223,9 @@ side effects to these modules.
   (snap, redraw) → `pointerup` → `_dragMarkerEnd` → `movePlotPoint` →
   `_saveAndUpdate` + `livePlotUpdate` → redraw (selection re-applied by `_restoreSelection`).
 - **Delete a point:** popup **Delete point** button / HUD trash dialog → `removePlotPoint` (right-click no longer deletes).
-- **Start patrol:** HUD/keybind/macro → `startPatrol` → `_handleDelayPeriod` (delay.js)
+- **Start patrol:** HUD/keybind/macro → `startPatrol` → `_handleDelayPeriod` (delay.js; sets `randomDelay` when the input contains a range)
   → `PatrolEngine.start` → `_navigationCycle/_navigationLoop` → per point: delay
-  sleep, `token.document.update`, speech/vision/audio, `lastPos`.
+  sleep (`pickDelayPeriod`: random per step for range pools), `token.document.update`, speech/vision/audio, `lastPos`.
 
 ## Gotchas (details in AGENTS.md)
 

@@ -82,7 +82,7 @@ export class PatrolMenu extends FormApplication {
             catchQuotes: quotesToFormString(tokenData.catchQuotes),
             createCombat: tokenData.createCombat,
             pauseGame: tokenData.pauseGame,
-            delayPeriod: formatDelayForForm(tokenData.delayPeriod),
+            delayPeriod: formatDelayForForm(tokenData.delayPeriod, tokenData.randomDelay),
             inverted: tokenData.inverted,
             isLinear: tokenData.isLinear,
             tokenRotation: tokenData.tokenRotation,
