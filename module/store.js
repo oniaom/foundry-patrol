@@ -36,9 +36,16 @@ export class PatrolDataManager {
         return foundry.utils.duplicate(this.scene?.getFlag(MODULE, FLAGS.ROUTES) ?? {});
     }
 
-    /** Persists the routes render cache into the scene flag. */
+    /**
+     * Persists the routes render cache into the scene flag. The flag is unset
+     * first because setFlag diff-merges objects: without the unset, entries for
+     * tokens whose points were all deleted would survive and keep rendering.
+     */
     async saveRoutes(routes) {
         if (!this.scene) return;
-        await this.scene.setFlag(MODULE, FLAGS.ROUTES, routes);
+        await this.scene.unsetFlag(MODULE, FLAGS.ROUTES);
+        if (Object.keys(routes ?? {}).length > 0) {
+            await this.scene.setFlag(MODULE, FLAGS.ROUTES, routes);
+        }
     }
 }

@@ -29,11 +29,6 @@ function addPlotSelectedToken() {
     }
 }
 
-function clearAllRoutes() {
-    forEachAffectedToken((token) => TP.tokenPatroller?.removeTokenRoute(token.id, true));
-    ui.notifications.info("Routes cleared for this scene");
-}
-
 async function generateMacro() {
     const selectedTokens = canvas.tokens.controlled;
     if (selectedTokens.length == 0) return -1;
@@ -63,7 +58,6 @@ const KEYBINDINGS = [
     ["startRoute", "Start Routes", "Start all patrol routes on this scene (selected tokens, or all owned tokens).", "KeyG", startAllRoutes],
     ["stopRoute", "Stop Routes", "Halt all patrol routes on this scene.", "KeyH", haltAllRoutes],
     ["addTokenPoint", "Add Plot Point", "Add the current position of each selected token as a patrol point.", "KeyR", addPlotSelectedToken],
-    ["clearRoute", "Clear Routes", "Clear the patrol routes of the selected (or all owned) tokens.", "KeyD", clearAllRoutes],
     ["generateMacro", "Generate Patrol Macro", "Create a macro that starts the patrols of the selected tokens.", "KeyM", generateMacro],
 ];
 

@@ -1,6 +1,13 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [3.3.2] - Bug fix
+### Fixed:
+- Fixed patrol point visuals (the dashed route line and point circles) staying on the map after deleting all of a token's points (HUD trash dialog, popup delete, or right-click): Foundry's `setFlag` diff-merges objects, so the token's stale entry in the scene `routes` render-cache flag was never removed — the layer kept drawing it while the underlying `plots` were empty, leaving dead, unselectable circles. `saveRoutes()` in `module/store.js` now unsets the `routes` flag before writing it (and skips the set entirely when the projection is empty), so the layer redraws with the deleted route gone.
+
+### Removed:
+- Removed the "Clear Routes" keyboard shortcut (Ctrl+Shift+D) and its `clearAllRoutes` handler from `module/keys.js`. Deleting routes remains available via the HUD trash dialog and per-point deletion.
+
 ## [3.3.1] - Bug fix
 ### Fixed:
 - Sidebar Patrol Tool buttons did not react on click: in Foundry v13/v14 a scene-control tool's `onClick` only fires on an actual button click when the tool is flagged `button: true`. Without it the click only moved `activeTool`, so start/stop applied late (only after clicking another control) and the "Routes started/halted" notification popped up when merely opening the Patrol Tool or clicking another tool afterwards. The tools in `module/scene-control.js` now set `button: true` and the control keeps `activeTool: ""`, so start/stop apply immediately on click and the notification only appears when the GM actually presses one.

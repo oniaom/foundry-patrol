@@ -133,8 +133,9 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
   `templates/patrol_menu.html`), which writes back through
   `updateFormRelatedData`.
 - **Keybindings** (`keys.js`, GM, Ctrl+Shift+…): start/stop all, add plot point for
-  selected tokens, clear routes, generate a macro. They call the same
-  `TP.tokenPatroller` API.
+  selected tokens, generate a macro. They call the same
+  `TP.tokenPatroller` API. (There is intentionally no clear-routes
+  keybinding; deleting routes is done via the HUD trash dialog.)
 - **Scene control** (`scene-control.js`, `getSceneControlButtons`, GM only): the
   **Patrol Tool** sidebar button (route icon) with two momentary buttons —
   **Start all patrols** / **Stop all patrols** — that call the exported
