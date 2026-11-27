@@ -37,7 +37,7 @@ module/
   util.js              gridSize(), isSquareGrid(), sleep(), routesLayer() lookup helpers
   store.js             PatrolDataManager — the ONLY module touching scene flags (FLAGS keys)
   schema.js            default per-token patrol data schema (createDefaultPatrolData)
-  delay.js             delay string <-> milliseconds parsing/formatting (delayPeriod)
+  delay.js             delay string (seconds; dot-decimal floats, comma lists, ranges) <-> milliseconds (delayPeriod)
   linear-routes.js     grid-path math for Linear Walk mode (pure functions)
   patroller.js         TokenPatrollerManager — tokenMap + plot/route CRUD + public API facade
   patrol-engine.js     PatrolEngine — the walking loop only (data via injected accessors)
@@ -81,6 +81,15 @@ ARCHITECTURE.md      codebase map — read with this file, keep in sync
   would drop every press — then a bounds/document rectangle check while the token
   layer is active). Without this, dragging a token on top of a point selects and
   drags the point too. Keep this guard.
+- **Right-click never touches a patrol point.** `onCanvasPointerDown` only handles
+  `event.button === 0`; deleting a point happens via the popup's **Delete point**
+  button (`removePlotPoint`). Right-click on the canvas is left entirely to
+  Foundry's own context menus — an accidental right-click must not delete a point.
+  Keep it that way.
+- **Delay decimals use a dot, never a comma.** Commas are the list separator in
+  the delay string ("1,5" = delays 1s and 5s), so comma→dot auto-conversion is NOT
+  done; the HUD delay field instead reverts invalid input to the previous value on
+  blur (`change` listener in `hud.js`). Parsing lives in `delay.js`.
 - **Patrol data is per-scene.** `tokenMap` is loaded from the viewed scene at
   `ready` and reloaded on every `canvasReady` for a *different* scene
   (`TokenPatrollerManager.reloadFromScene()` in `patroller.js`). Never persist
@@ -128,7 +137,7 @@ ARCHITECTURE.md      codebase map — read with this file, keep in sync
 | Change point rendering | `module/routes-layer.js`, `module/pixi-compat.js` |
 | Change click / drag / delete interaction with points | `module/point-interaction.js`, `module/routes-layer.js`, `module/controls.js`, `module/coords.js` |
 | Change patrol walking logic | `module/patrol-engine.js`, `module/patroller.js` (facade) |
-| Change delays (parse/format) | `module/delay.js` |
+| Change delays (parse/format) | `module/delay.js` (HUD field revert in `hud.js`, menu field in `menu.js` / `templates/patrol_menu.html`) |
 | Change linear walk math | `module/linear-routes.js` |
 | Change data storage / flags / schema | `module/store.js`, `module/schema.js`, `patroller.js` (`_syncRoutesFlag`, `livePlotUpdate`) |
 | Token HUD buttons | `module/hud.js` |

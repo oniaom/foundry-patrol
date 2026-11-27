@@ -19,8 +19,9 @@ RouteDrawing: animated dashed Graphics line + one marker circle Graphics per poi
 canvas element pointerdown → registerCanvasPointInteraction() (point-interaction.js)
    │  (dropped when the press lands on a token — tokenAtWorldPoint)
    │  clientToWorld() (coords.js, via stage.toLocal) → RouteDrawing.hitTestMarker() →
-   │  left: select (ring + popup) + arm drag · drag: move + snap + movePlotPoint() on release
-   │  right: removePlotPoint() · empty click / Escape: clear selection
+   │  left button only: select (ring + popup) + arm drag · drag: move + snap +
+   │  movePlotPoint() on release · empty click / Escape: clear selection
+   │  (right-click is ignored — points are deleted via the popup's Delete button)
    ▼
 controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → livePlotUpdate() → _syncRoutesFlag() + layer.draw() → back to top
 ```
@@ -85,7 +86,7 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
 
 - `TokenPatrollerManager` owns `tokenMap` and creates one `PatrolEngine`, injecting
   `getData`/`hasData`/`persist` accessors so the engine never touches storage itself.
-- `startPatrol` parses the delay string (`delay.js` → `_handleDelayPeriod`), then
+- `startPatrol` parses the delay string (`delay.js` → `_handleDelayPeriod`; seconds as ints or dot-decimals like `1.5`, comma lists, `-` ranges), then
   `PatrolEngine.start(token)` loops `_navigationCycle` → `_navigationLoop` over
   `plots` (or `linearPath`/`countinousRoutes` when `isLinear` on square grids),
   sleeping `delayPeriod[iterator]`, moving the token via
@@ -124,13 +125,13 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
   rectangle) while the token layer is the active layer. A press on a token belongs
   to Foundry's token layer, so a point under the token is never selected, dragged,
   or deleted (otherwise dragging a token on a point drags the point).
-  - left button → `beginMarkerDrag(index, normalizedEvent)`: selects
+  - left button (the only button handled; right-click is left to Foundry) →
+    `beginMarkerDrag(index, normalizedEvent)`: selects
     (`_selectPoint` → white ring + `showPointMenu` at client coords) and arms a
     drag via window `pointermove`/`pointerup`/`pointercancel`; `_dragMarkerMove`
     moves the point live (snapped by `_snapPointToGrid` unless gridless), redraws
     marker+ring+line; `_dragMarkerEnd` persists with `movePlotPoint` only if it
     actually dragged.
-  - right button → `removePlotPoint(tokenId, index)`.
   - no hit → `clearAllSelections()` (clears rings + closes popup). Escape does the
     same via `controls.js`.
 - `controls.js` also holds `patrolToolState = { selected: {tokenId, index} | null }`,
@@ -149,7 +150,7 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
 - **Token HUD** (`hud.js`, on `renderTokenHUD`): Add Point (map icon) →
   `addPlotPoint`; trash → `deleteProcess` dialog; recycle/arrows → `_setInverse`
   (cycle vs forwards-backwards); line/linear → `_setLinear`; walking →
-  `startPatrol`/`stopPatrol`; delay text field; caret → `PatrolMenu` (menu.js +
+  `startPatrol`/`stopPatrol`; delay text field (seconds, dot-decimals like `1.5`; invalid input reverts to the previous value on blur); caret → `PatrolMenu` (menu.js +
   `templates/patrol_menu.html`), which writes back through
   `updateFormRelatedData`.
 - **Keybindings** (`keys.js`, GM, Ctrl+Shift+…): start/stop all, add plot point for
@@ -217,7 +218,7 @@ side effects to these modules.
 - **Move a point:** same pointerdown → window `pointermove` → `_dragMarkerMove`
   (snap, redraw) → `pointerup` → `_dragMarkerEnd` → `movePlotPoint` →
   `_saveAndUpdate` + `livePlotUpdate` → redraw (selection re-applied by `_restoreSelection`).
-- **Delete a point:** right-click → `removePlotPoint`, or popup button / HUD dialog → same.
+- **Delete a point:** popup **Delete point** button / HUD trash dialog → `removePlotPoint` (right-click no longer deletes).
 - **Start patrol:** HUD/keybind/macro → `startPatrol` → `_handleDelayPeriod` (delay.js)
   → `PatrolEngine.start` → `_navigationCycle/_navigationLoop` → per point: delay
   sleep, `token.document.update`, speech/vision/audio, `lastPos`.

@@ -87,7 +87,7 @@ export function showPointMenu({ tokenId, index, clientX, clientY }) {
     });
 
     const hint = document.createElement("div");
-    hint.textContent = "Or drag the point on the map to move it (snaps to grid). Right-click deletes.";
+    hint.textContent = "Or drag the point on the map to move it (snaps to grid).";
     hint.style.opacity = "0.8";
 
     el.append(title, deleteButton, moveButton, hint);

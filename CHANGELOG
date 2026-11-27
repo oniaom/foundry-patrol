@@ -1,6 +1,14 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [3.5.0] - Floating point delays; right-click no longer deletes points
+### Added:
+- Move delay periods now accept floating point seconds: decimals use a dot, e.g. `1.5`, `1.5, 2.5` or `1.5-3` (ranges step by 1 from the start value). Works in both the HUD delay field and the Patrol Menu. Commas remain the list separator (`1,5` = the two delays 1s and 5s), never a decimal separator. In the HUD delay field, invalid input (letters, a second dot, empty) reverts to the previous value when you click out of the field; the Patrol Menu keeps the stored delays on invalid input.
+### Removed:
+- Right-clicking a patrol point no longer deletes it (too easy to hit by accident). Left-click the point and choose **Delete point** in the popup instead; right-click on the canvas is left entirely to Foundry's own context menus.
+### Fixed:
+- Delay ranges no longer duplicate the range's end value (`2-4` produced 2,3,4,4; now 2,3,4 as documented).
+
 ## [3.4.1] - Bug fix
 ### Fixed:
 - Fixed patrol points not being selectable/editable with the mouse on displays where the canvas backing store is denser than its CSS size (`devicePixelRatio != 1` — HiDPI screens, Windows display scaling, browser zoom e.g. in Firefox). `clientToWorld()` in `module/coords.js` converted client px to canvas bitmap px but did not divide by `renderer.resolution`, the unit `stage.toLocal()` expects (PIXI v8's `EventSystem.mapPositionToPoint` does divide). The computed world point was off by the pixel-ratio factor, so the DOM-level point hit-test missed every marker and clicks did nothing. The conversion now mirrors PIXI's own event mapping exactly (byte-identical behavior at resolution 1).

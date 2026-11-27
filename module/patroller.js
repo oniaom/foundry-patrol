@@ -118,7 +118,7 @@ export class TokenPatrollerManager {
         return this.tokenMap[tokenId];
     }
 
-    /** Removes the plot point at `index` (right-click on a point / popup button). */
+    /** Removes the plot point at `index` (popup "Delete point" button). */
     async removePlotPoint(tokenId, index) {
         const data = this.tokenMap[tokenId];
         if (!data || !Array.isArray(data.plots)) return;

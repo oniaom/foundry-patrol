@@ -6,7 +6,9 @@ import { closePointMenu } from "./controls.js";
 // ---------------------------------------------------------------------------
 // DOM-level mouse interaction with the plotted patrol points.
 // A single pointerdown listener on the canvas element hit-tests every plotted
-// point (circle) and opens the edit popup / starts a drag / deletes the point.
+// point (circle) on left-click and opens the edit popup / starts a drag.
+// Right-click is ignored entirely: deleting a point via right-click was too easy
+// to trigger accidentally — use the popup's "Delete point" button instead.
 // This works regardless of which canvas layer is active or how PIXI dispatches
 // events, because it only needs the DOM event + the stage transform.
 // ---------------------------------------------------------------------------
@@ -60,7 +62,9 @@ export function registerCanvasPointInteraction() {
 
 function onCanvasPointerDown(event) {
     if (!game.user?.isGM) return;
-    if (event.button !== 0 && event.button !== 2) return;
+    // Left button only: right-click belongs to Foundry (token context menus) and
+    // must never select, drag, or delete a patrol point by accident.
+    if (event.button !== 0) return;
     const world = eventGlobal(event) ?? clientToWorld(event);
     if (!world) return;
     // A press on a token is a token interaction (select / drag / context menu).
@@ -71,23 +75,17 @@ function onCanvasPointerDown(event) {
         for (const drawing of layer._drawings) {
             const hit = drawing.hitTestMarker(world.x, world.y);
             if (!hit) continue;
-            if (event.button === 2) {
-                // right-click: delete the point immediately
-                layer.clearAllSelections();
-                TP.tokenPatroller?.removePlotPoint(drawing.tokenId, hit.index);
-            } else {
-                // left-click: select the point (ring + options popup) and arm a potential drag
-                drawing.beginMarkerDrag(hit.index, {
-                    clientX: event.clientX,
-                    clientY: event.clientY,
-                    global: world,
-                    button: event.button,
-                });
-            }
+            // left-click: select the point (ring + options popup) and arm a potential drag
+            drawing.beginMarkerDrag(hit.index, {
+                clientX: event.clientX,
+                clientY: event.clientY,
+                global: world,
+                button: event.button,
+            });
             return;
         }
     }
-    // clicked empty space: drop the current selection and close the popup
+    // left-click on empty space: drop the current selection and close the popup
     if (layer) layer.clearAllSelections();
     else closePointMenu();
 }

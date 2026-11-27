@@ -69,19 +69,18 @@ Every plotted point dot is directly clickable on the map — no toolbar tool nee
 
 - **Left-click a point** — it gets a white ring and a small options popup appears with **Delete point** and **Move point**.
 - **Drag a point** on the map to move it — it snaps to the grid (unless the scene is gridless) and the route line follows live; the new position is saved when you release.
-- **Right-click a point** to delete it immediately.
 - Pressing on a **token** never touches patrol points — you can select or drag a token that sits on top of a point without selecting, moving, or deleting the point.
 
 ### Deleting points
 
-- Left-click a point dot and choose **Delete point** in the popup, or right-click the dot.
+- Left-click a point dot and choose **Delete point** in the popup.
 - Click the **trash icon** in the token HUD to delete **all** points of the token, or just the **last** point (you choose in the dialog).
 
 ### Starting / stopping a patrol
 
 - Click the **walking icon** (Start route) to make the token walk its route. The icon switches to a stop icon — click it to halt.
 - Or use the **Patrol Tool** in the left sidebar (route icon, GM only): **Start all patrols** (play icon) starts every patrol on the scene and **Stop all patrols** (stop icon) halts them — the same actions as the keybindings below, no keyboard needed. If tokens are selected, only those are affected; otherwise all owned tokens are.
-- The **text field** next to it sets the delay (in seconds) between points, e.g. `2` or `1, 4, 2` or `1-5`.
+- The **text field** next to it sets the delay (in seconds) between points, e.g. `2`, `1.5`, `1, 4, 2` or `1-5`. Decimals use a dot (commas separate values); if the entered text is invalid, the field reverts to the previous value when you click out of it.
 - The **recycle / arrows icon** toggles between *Cycle Mode* (loop the route) and *Forwards-Backwards Mode* (walk the route and then back).
 - The **line / linear icon** toggles *Plot Walk* vs *Linear Walk* (square grids only — fills in the grid spaces between points so diagonal movement looks like a straight line).
 - The **caret icon** (right column) opens the full **Patrol Menu** with per-token settings: quotes, vision reactions, ambient audio, delay, rotation, language, and more.

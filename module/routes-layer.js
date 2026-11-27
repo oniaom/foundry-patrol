@@ -102,9 +102,9 @@ export class RoutesLayer extends CanvasLayer {
 
 /**
  * Draws the animated dashed line that visualizes a single token's patrol route,
- * plus a marker circle at every plotted point. Clicking a point circle (handled
- * at the DOM level, see point-interaction.js) selects it (options popup: delete /
- * move), dragging moves it, right-click deletes it. Drawing supports both PIXI v8
+ * plus a marker circle at every plotted point. Left-clicking a point circle
+ * (handled at the DOM level, see point-interaction.js) selects it (options
+ * popup: delete / move), dragging moves it. Drawing supports both PIXI v8
  * (fill()/stroke()) and v7 (lineStyle()/beginFill()) styling APIs via pixi-compat.js.
  */
 class RouteDrawing {

@@ -2,6 +2,7 @@ import { MODULE } from "./config.js";
 import { TP } from "./tp.js";
 import { PatrolMenu } from "./menu.js";
 import { isSquareGrid } from "./util.js";
+import { normalizeDelayInput } from "./delay.js";
 
 /** Builds one HUD control icon (a div.control-icon wrapping an img/i element). */
 function makeIconButton(innerHtml, title) {
@@ -91,7 +92,13 @@ export class TokenHud {
         patrolDelayHUD.type = "text";
         patrolDelayHUD.id = "patrolWait";
         patrolDelayHUD.value = delayPeriod;
-        patrolDelayHUD.title = "Delay period";
+        patrolDelayHUD.title = "Delay period (seconds, dot decimals e.g. 1.5)";
+        // Clicking out of the field with invalid input (letters, a second dot,
+        // empty) reverts to the previously shown value. Commas stay list
+        // separators, so decimals must use a dot.
+        patrolDelayHUD.addEventListener("change", () => {
+            if (normalizeDelayInput(patrolDelayHUD.value) === undefined) patrolDelayHUD.value = delayPeriod;
+        });
 
         const patrolMenu = makeIconButton(`<i class="fas fa-caret-down"></i>`, "Patrol Menu");
 
