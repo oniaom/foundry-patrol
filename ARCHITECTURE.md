@@ -37,9 +37,10 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
   (re)draw; idempotent).
 - `Hooks.once("ready")`: creates `TP.patrolDataManager`, and for GMs
   `TP.tokenPatroller`, `TP.visionHandler`, `TP.audioHandler`, `TP.speechHandler`;
-  then runs `livePlotUpdate()` once — the pre-3.3.2 migration that recomputes
-  the "routes" render cache from the patrols flag, dropping stale entries
-  left behind by the old merge-written flag (dead, unselectable circles).
+  then runs `migrateAllSceneRoutes()` — the pre-3.3.2 migration that recomputes
+  **every scene's** "routes" render cache from that scene's patrols flag,
+  dropping stale entries left behind by the old merge-written flag (dead,
+  unselectable circles), then redraws the viewed scene's layer.
 - Hooks: `renderTokenHUD` → `TokenHud.HUD` (hud.js); `controlToken` →
   `livePlotUpdate(token.id)` on select, redraw on deselect; `deleteToken` /
   `preDeleteAmbientSound` → cleanup in patroller.
