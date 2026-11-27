@@ -31,9 +31,9 @@ export class PatrolDataManager {
         await this.scene.setFlag(MODULE, FLAGS.PATROLS, tokenMap);
     }
 
-    /** Loads the routes render cache from the scene flag (returns a deep copy). */
-    async getRoutes() {
-        return foundry.utils.duplicate(this.scene?.getFlag(MODULE, FLAGS.ROUTES) ?? {});
+    /** Loads the routes render cache from a scene's flag (returns a deep copy). */
+    async getRoutes(scene = this.scene) {
+        return foundry.utils.duplicate(scene?.getFlag(MODULE, FLAGS.ROUTES) ?? {});
     }
 
     /**
@@ -41,11 +41,11 @@ export class PatrolDataManager {
      * first because setFlag diff-merges objects: without the unset, entries for
      * tokens whose points were all deleted would survive and keep rendering.
      */
-    async saveRoutes(routes) {
-        if (!this.scene) return;
-        await this.scene.unsetFlag(MODULE, FLAGS.ROUTES);
+    async saveRoutes(routes, scene = this.scene) {
+        if (!scene) return;
+        await scene.unsetFlag(MODULE, FLAGS.ROUTES);
         if (Object.keys(routes ?? {}).length > 0) {
-            await this.scene.setFlag(MODULE, FLAGS.ROUTES, routes);
+            await scene.setFlag(MODULE, FLAGS.ROUTES, routes);
         }
     }
 }

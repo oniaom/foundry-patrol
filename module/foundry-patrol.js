@@ -3,7 +3,8 @@ import { TP } from "./tp.js";
 import { PatrolDataManager } from "./store.js";
 import { TokenPatrollerManager } from "./patroller.js";
 import { TokenHud } from "./hud.js";
-import { RoutesLayer } from "./routes-layer.js";
+import { RoutesLayer, routesFromTokenMap } from "./routes-layer.js";
+import { FLAGS } from "./store.js";
 import { registerCanvasPointInteraction } from "./point-interaction.js";
 import { registerKeybindings } from "./keys.js";
 import { registerPatrolControl } from "./scene-control.js";
@@ -44,6 +45,23 @@ function onInit() {
     Hooks.on("canvasReady", () => registerCanvasPointInteraction());
 }
 
+/**
+ * Migration for scenes saved while the "routes" flag was merge-written (pre
+ * 3.3.2): their render cache can hold entries for tokens whose points were
+ * all deleted (or whose token was deleted) — dead, unselectable circles.
+ * Recompute every scene's cache from its own "patrols" flag (the source of
+ * truth), so only stale entries are dropped; clean scenes are left untouched.
+ */
+async function migrateAllSceneRoutes() {
+    for (const scene of game.scenes ?? []) {
+        const patrols = scene.getFlag(MODULE, FLAGS.PATROLS) ?? {};
+        const routes = routesFromTokenMap(patrols);
+        const current = await TP.patrolDataManager.getRoutes(scene);
+        if (JSON.stringify(current) === JSON.stringify(routes)) continue;
+        await TP.patrolDataManager.saveRoutes(routes, scene);
+    }
+}
+
 async function onReady() {
     TP.patrolDataManager = new PatrolDataManager();
     if (!game.user.isGM) return;
@@ -51,10 +69,8 @@ async function onReady() {
     TP.visionHandler = new VisionHandler();
     TP.audioHandler = new AudioHandler();
     TP.speechHandler = new SpeechHandler();
-    // Migration for scenes saved while the routes flag was merge-written (pre
-    // 3.3.2): recompute the render cache from the patrols flag (the source of
-    // truth), dropping only entries whose points no longer exist.
-    await TP.tokenPatroller.livePlotUpdate();
+    await migrateAllSceneRoutes();
+    await routesLayer()?.draw();
     const module = game.modules.get(MODULE);
     if (module) module.api = TP;
 }
