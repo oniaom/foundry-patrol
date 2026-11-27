@@ -154,9 +154,9 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
 - **Token HUD** (`hud.js`, on `renderTokenHUD`): Add Point (map icon) →
   `addPlotPoint`; trash → `deleteProcess` dialog; recycle/arrows → `_setInverse`
   (cycle vs forwards-backwards); line/linear → `_setLinear`; walking →
-  `startPatrol`/`stopPatrol`; delay text field (seconds, dot-decimals like `1.5`; a range like `1-3` is a random delay in 0.5s steps, shown back as `1-3`; invalid input reverts to the previous value on blur); caret → `PatrolMenu` (menu.js +
+  `startPatrol`/`stopPatrol`; delay text field (seconds, dot-decimals like `1.5`; a range like `1-3` is a random delay in 0.5s steps, shown back as `1-3`; Enter saves the value, invalid input reverts to the previous value on blur/Enter); caret → `PatrolMenu` (menu.js +
   `templates/patrol_menu.html`), which writes back through
-  `updateFormRelatedData`.
+  `updateFormRelatedData` (Enter in the delay textarea submits the form).
 - **Keybindings** (`keys.js`, GM, Ctrl+Shift+…): start/stop all, add plot point for
   selected tokens, generate a macro. They call the same
   `TP.tokenPatroller` API. (There is intentionally no clear-routes
@@ -166,7 +166,8 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
   **Start all patrols** / **Stop all patrols** — that call the exported
   `startAllRoutes`/`haltAllRoutes` from `keys.js`, i.e. exactly the
   start/stop-all keybindings, reachable by mouse. Tools are flagged `button: true`
-  (v13/v14 only fire `onClick` for button tools) and the control keeps
+  and carry `onChange` (the v13/v14 `SceneControlTool` callback for button tools;
+  `onClick` is kept as a fallback — alone it is ignored in v13/v14) and the control keeps
   `activeTool: ""` so opening it never triggers an action. No `layer`
   association: point picking is DOM-level and must not switch the active
   canvas layer.

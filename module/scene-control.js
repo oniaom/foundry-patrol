@@ -1,6 +1,6 @@
 import { startAllRoutes, haltAllRoutes } from "./keys.js";
 
-// [name, title, icon, onClick] — the Patrol Tool's buttons, as a data table like
+// [name, title, icon, handler] — the Patrol Tool's buttons, as a data table like
 // KEYBINDINGS in keys.js. The handlers are the same ones the GM keybindings
 // (Ctrl+Shift+G / Ctrl+Shift+H) use, so mouse and keyboard never diverge.
 const PATROL_TOOLS = [
@@ -10,16 +10,17 @@ const PATROL_TOOLS = [
 
 /**
  * Builds the tool map (keyed by tool name, with order) from the PATROL_TOOLS table.
- * Every tool gets `button: true`: in Foundry v13/v14 a tool's `onClick` only fires
- * on an actual button click when the tool is flagged as a button. Without it the
- * click just moves `activeTool` and the handler fires late — on the next control
- * activation — which is exactly the "nothing happens until I click another tool"
- * bug. All Patrol Tool actions are momentary, so all tools are buttons.
+ * Every tool gets `button: true` (momentary button, never moves `activeTool`) and
+ * BOTH `onChange` and `onClick` pointing at the same handler: the v13/v14
+ * `SceneControlTool` schema fires `onChange(event, active)` for button tools —
+ * `onClick` alone is silently ignored there, which is why the buttons used to do
+ * nothing. The handlers are idempotent (starting an already-walking patrol and
+ * halting a halted one are no-ops), so a build that fires both is harmless.
  */
 function buildTools() {
     const tools = {};
-    PATROL_TOOLS.forEach(([name, title, icon, onClick], index) => {
-        tools[name] = { name, order: index + 1, title, icon, button: true, onClick };
+    PATROL_TOOLS.forEach(([name, title, icon, handler], index) => {
+        tools[name] = { name, order: index + 1, title, icon, button: true, onClick: handler, onChange: handler };
     });
     return tools;
 }

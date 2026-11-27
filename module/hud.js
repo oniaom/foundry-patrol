@@ -105,6 +105,15 @@ export class TokenHud {
         patrolDelayHUD.addEventListener("change", () => {
             if (normalizeDelayInput(patrolDelayHUD.value) === undefined) patrolDelayHUD.value = delayPeriod;
         });
+        // Enter saves the delay right away (invalid input reverts immediately)
+        // instead of waiting for a click on another button.
+        patrolDelayHUD.addEventListener("keydown", (ev) => {
+            if (ev.key !== "Enter") return;
+            ev.preventDefault();
+            if (normalizeDelayInput(patrolDelayHUD.value) === undefined) patrolDelayHUD.value = delayPeriod;
+            else TP.tokenPatroller?._handleDelayPeriod(patrolDelayHUD.value, tokenId);
+            patrolDelayHUD.blur();
+        });
 
         const patrolMenu = makeIconButton(`<i class="fas fa-caret-down"></i>`, "Patrol Menu");
 
