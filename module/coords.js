@@ -19,7 +19,9 @@ export function eventGlobal(event) {
 // PIXI hit-testing is deliberately not relied upon for point picking (layer
 // eventMode/interactiveChildren behavior differs across Foundry/PIXI builds and
 // has proven unreliable), so we do the transform ourselves:
-// client px -> canvas bitmap px -> stage-local (world) via the stage transform.
+// client px -> canvas bitmap px -> renderer-resolution units (the space
+// stage.toLocal expects, i.e. exactly what PIXI's EventSystem.mapPositionToPoint
+// produces for event.global) -> stage-local (world) via the stage transform.
 export function clientToWorld(event) {
     try {
         const app = canvas?.app;
@@ -33,8 +35,14 @@ export function clientToWorld(event) {
         const top = rect?.top ?? 0;
         const rectW = rect?.width || viewW;
         const rectH = rect?.height || viewH;
-        const sx = ((event.clientX - left) * viewW) / rectW;
-        const sy = ((event.clientY - top) * viewH) / rectH;
+        // The renderer resolution must be divided out: on displays or browser
+        // zoom where the canvas backing store is denser than its CSS size
+        // (devicePixelRatio != 1), skipping this makes the computed world point
+        // off by that factor and every point hit-test misses ("points not
+        // selectable"). At resolution 1 this is identical to plain CSS px.
+        const resolution = app?.renderer?.resolution || 1;
+        const sx = ((event.clientX - left) * viewW) / rectW / resolution;
+        const sy = ((event.clientY - top) * viewH) / rectH / resolution;
         const p = stage.toLocal({ x: sx, y: sy });
         if (p && Number.isFinite(p.x) && Number.isFinite(p.y)) return { x: p.x, y: p.y };
     } catch (err) {

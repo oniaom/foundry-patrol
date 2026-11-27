@@ -42,7 +42,22 @@ function onInit() {
     // Clicking a plotted point circle (delete / move options) is handled at the
     // DOM level on the canvas element, so it works no matter which canvas layer
     // is active. (Re)bind whenever the canvas is (re)drawn for a scene.
-    Hooks.on("canvasReady", () => registerCanvasPointInteraction());
+    Hooks.on("canvasReady", onCanvasReady);
+}
+
+// Id of the scene the in-memory patrol tokenMap was loaded from. An in-place
+// scene switch fires canvasReady (not ready), so without tracking this the
+// manager would keep the previous scene's data and sync it into the new scene's
+// flags (old scene's points rendered on the new scene).
+let loadedSceneId = null;
+
+async function onCanvasReady() {
+    registerCanvasPointInteraction();
+    const scene = canvas?.scene;
+    if (!scene || scene.id === loadedSceneId) return;
+    loadedSceneId = scene.id;
+    if (!game.user?.isGM || !TP.tokenPatroller) return;
+    await TP.tokenPatroller.reloadFromScene();
 }
 
 /**

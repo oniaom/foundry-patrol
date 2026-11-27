@@ -12,6 +12,9 @@ A Foundry VTT module (id `foundry-patrol`) for **V13/V14 only** (PIXI v8). It le
 plot patrol points for tokens; tokens then walk their route automatically. Plain ES
 modules under `module/`, entry point `module/foundry-patrol.js` (see `module.json` →
 `esmodules`). No build step, no test runner, no package.json — edit and reload Foundry.
+The module has **no Node.js runtime requirement** (it runs in the browser); Node.js
+**24+** is only needed for the dev/CI tooling (`.github/workflows/syntax-check.yml`
+runs on Node 24 via `actions/setup-node@v6`).
 
 ## First 5 minutes (read in this order)
 
@@ -26,6 +29,7 @@ modules under `module/`, entry point `module/foundry-patrol.js` (see `module.jso
 
 ```
 module.json            manifest (id, version, compatibility 13/14, esmodules entry)
+.github/workflows/syntax-check.yml  CI: validates module.json + syntax-parses every file in module/ on push/PR to master
 module/
   foundry-patrol.js    entry point: settings, hooks, CONFIG.Canvas.layers registration
   config.js            MODULE id + world/client settings definitions (data-driven table)
@@ -66,12 +70,23 @@ ARCHITECTURE.md      codebase map — read with this file, keep in sync
   `passive` + `!interactiveChildren` subtrees). Point picking is **DOM-level**:
   `registerCanvasPointInteraction()` in `point-interaction.js` listens on the
   canvas element and converts client→world coords via `coords.js` (`clientToWorld`,
-  `stage.toLocal`). Keep it that way.
+  `stage.toLocal`). Keep it that way. **`clientToWorld` must divide by
+  `canvas.app.renderer.resolution`** (mirroring PIXI v8's
+  `EventSystem.mapPositionToPoint`): without it the world point is off by the
+  device-pixel-ratio factor on HiDPI/zoomed displays and every hit-test misses.
 - **Point picking must never hijack a press on a token.** `onCanvasPointerDown`
   in `point-interaction.js` drops the event when `tokenAtWorldPoint(world)` finds
-  a token under the pointer (`canvas.tokens.hover` first, then a bounds/document
-  rectangle check while the token layer is active). Without this, dragging a
-  token on top of a point selects and drags the point too. Keep this guard.
+  a token under the pointer (`canvas.tokens.hover` first — but only if that hover
+  is a live placeable of the current scene, a stale hover from a previous scene
+  would drop every press — then a bounds/document rectangle check while the token
+  layer is active). Without this, dragging a token on top of a point selects and
+  drags the point too. Keep this guard.
+- **Patrol data is per-scene.** `tokenMap` is loaded from the viewed scene at
+  `ready` and reloaded on every `canvasReady` for a *different* scene
+  (`TokenPatrollerManager.reloadFromScene()` in `patroller.js`). Never persist
+  while the viewed scene differs from the loaded one — `_saveAndUpdate()` /
+  `_syncRoutesFlag()` guard this via `_ownsViewedScene()`; writing anyway would
+  project one scene's points into another scene's flags.
 - PIXI v8 events: `event.global` / `event.client` are direct; `event.data` is a
   deprecated getter returning the event itself. Graphics styling: v8 `fill()/stroke()`
   after building the path; the code supports both v8 and v7 APIs — keep it that way.
@@ -97,7 +112,8 @@ ARCHITECTURE.md      codebase map — read with this file, keep in sync
   the GitHub connector tools (`create_branch`, `push_files`, `create_pull_request`,
   `pull_request_read`) against owner `oniaom`, repo `foundry-patrol`.
 - **No test runner / no Foundry client available.** Verify by: (a) syntax-checking
-  every file in `module/` (strip `import`/`export` lines, parse with `new Function`),
+  every file in `module/` (strip `import`/`export` lines, parse with `new Function`,
+  Node 24+; the same check runs in CI via `.github/workflows/syntax-check.yml`),
   (b) a mocked behavioral test (mock PIXI/foundry/canvas/window/document, eval the
   real module sources, drive the flow — see the scratchpad test pattern used for
   `routes-layer.js`), (c) `git diff` review. Say explicitly when something was NOT

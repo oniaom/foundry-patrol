@@ -23,6 +23,7 @@ import { showDeleteRouteDialog } from "./controls.js";
 export class TokenPatrollerManager {
     constructor() {
         this.tokenMap = {};
+        this.sceneId = null; // scene the tokenMap was loaded from (see _ownsViewedScene)
         this.debug = false;
         this.engine = new PatrolEngine({
             getData: (tokenId) => this.tokenMap[tokenId],
@@ -50,11 +51,39 @@ export class TokenPatrollerManager {
     /** Persists the tokenMap through the store and keeps the local reference. */
     async _saveAndUpdate(data) {
         this.tokenMap = data;
+        if (!this._ownsViewedScene()) return;
         await TP.patrolDataManager.savePatrols(this.tokenMap);
     }
 
     async initializeHashTable() {
+        this.sceneId = canvas?.scene?.id ?? null;
         this.tokenMap = await TP.patrolDataManager.getPatrols();
+    }
+
+    // True when the viewed scene is the one the in-memory tokenMap was loaded
+    // from. Persisting while false would write one scene's patrol data into
+    // another scene's flags (stale cross-scene routes), so writes are skipped.
+    _ownsViewedScene() {
+        const viewed = canvas?.scene?.id;
+        return !viewed || !this.sceneId || viewed === this.sceneId;
+    }
+
+    /**
+     * Reloads the patrol data from the currently viewed scene. Called when the
+     * canvas is (re)drawn for a different scene (in-place scene switch fires
+     * canvasReady, not ready): without this the stale previous-scene tokenMap
+     * would be projected into the new scene's "routes" flag by the next
+     * livePlotUpdate() and the old scene's points would render on the new one.
+     * The old tokenMap is dropped WITHOUT persisting it — savePatrols() would
+     * write the previous scene's data into the new scene's "patrols" flag.
+     * Running patrol loops hold a captured reference to their old data object,
+     * so they are halted by flipping isWalking on those objects (no persist).
+     */
+    async reloadFromScene() {
+        for (const data of Object.values(this.tokenMap)) data.isWalking = false;
+        this.sceneId = canvas?.scene?.id ?? null;
+        this.tokenMap = await TP.patrolDataManager.getPatrols();
+        await this.livePlotUpdate();
     }
 
     // ------------------------------------------------------------------
@@ -298,7 +327,7 @@ export class TokenPatrollerManager {
      * ready-time migration below costs nothing once a scene is clean.
      */
     async _syncRoutesFlag() {
-        if (!canvas.scene) return;
+        if (!canvas.scene || !this._ownsViewedScene()) return;
         const routes = routesFromTokenMap(this.tokenMap);
         const current = await TP.patrolDataManager.getRoutes();
         if (JSON.stringify(current) === JSON.stringify(routes)) return;
