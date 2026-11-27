@@ -43,6 +43,10 @@ Note: The single quote `'` is used as the delimiting factor in seeing quotes. So
 - Foundry VTT **V13 or later** (verified on V14)
 - Square grids are required for *Linear Walk* mode (see below); other grid types work in normal Plot Walk mode
 
+### Development / CI
+
+The module itself runs entirely in the browser — there is no build step and **no Node.js runtime requirement for using the module**. The only Node.js requirement is for development tooling: the CI workflow (`.github/workflows/syntax-check.yml`), which validates `module.json` and syntax-checks every file in `module/` on each push/PR to `master`, runs on **Node.js 24** (`actions/checkout@v6` + `actions/setup-node@v6`); use Node 24+ to run the same check locally.
+
 ## Installation
 
 **Recommended (auto-updates):** In Foundry, open the launcher's **Add-On Modules** tab → **Install Module** → paste:

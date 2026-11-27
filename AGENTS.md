@@ -12,6 +12,9 @@ A Foundry VTT module (id `foundry-patrol`) for **V13/V14 only** (PIXI v8). It le
 plot patrol points for tokens; tokens then walk their route automatically. Plain ES
 modules under `module/`, entry point `module/foundry-patrol.js` (see `module.json` →
 `esmodules`). No build step, no test runner, no package.json — edit and reload Foundry.
+The module has **no Node.js runtime requirement** (it runs in the browser); Node.js
+**24+** is only needed for the dev/CI tooling (`.github/workflows/syntax-check.yml`
+runs on Node 24 via `actions/setup-node@v6`).
 
 ## First 5 minutes (read in this order)
 
@@ -109,8 +112,8 @@ ARCHITECTURE.md      codebase map — read with this file, keep in sync
   the GitHub connector tools (`create_branch`, `push_files`, `create_pull_request`,
   `pull_request_read`) against owner `oniaom`, repo `foundry-patrol`.
 - **No test runner / no Foundry client available.** Verify by: (a) syntax-checking
-  every file in `module/` (strip `import`/`export` lines, parse with `new Function`)
-  — the same check runs in CI via `.github/workflows/syntax-check.yml`,
+  every file in `module/` (strip `import`/`export` lines, parse with `new Function`,
+  Node 24+; the same check runs in CI via `.github/workflows/syntax-check.yml`),
   (b) a mocked behavioral test (mock PIXI/foundry/canvas/window/document, eval the
   real module sources, drive the flow — see the scratchpad test pattern used for
   `routes-layer.js`), (c) `git diff` review. Say explicitly when something was NOT
