@@ -26,6 +26,7 @@ modules under `module/`, entry point `module/foundry-patrol.js` (see `module.jso
 
 ```
 module.json            manifest (id, version, compatibility 13/14, esmodules entry)
+.github/workflows/syntax-check.yml  CI: validates module.json + syntax-parses every file in module/ on push/PR to master
 module/
   foundry-patrol.js    entry point: settings, hooks, CONFIG.Canvas.layers registration
   config.js            MODULE id + world/client settings definitions (data-driven table)
@@ -108,7 +109,8 @@ ARCHITECTURE.md      codebase map — read with this file, keep in sync
   the GitHub connector tools (`create_branch`, `push_files`, `create_pull_request`,
   `pull_request_read`) against owner `oniaom`, repo `foundry-patrol`.
 - **No test runner / no Foundry client available.** Verify by: (a) syntax-checking
-  every file in `module/` (strip `import`/`export` lines, parse with `new Function`),
+  every file in `module/` (strip `import`/`export` lines, parse with `new Function`)
+  — the same check runs in CI via `.github/workflows/syntax-check.yml`,
   (b) a mocked behavioral test (mock PIXI/foundry/canvas/window/document, eval the
   real module sources, drive the flow — see the scratchpad test pattern used for
   `routes-layer.js`), (c) `git diff` review. Say explicitly when something was NOT
