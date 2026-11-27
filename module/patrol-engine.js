@@ -1,6 +1,7 @@
 import { MODULE } from "./config.js";
 import { TP } from "./tp.js";
 import { isSquareGrid, sleep } from "./util.js";
+import { pickDelayPeriod } from "./delay.js";
 
 /**
  * PatrolEngine — the walking loop and nothing else. Given a token and its live
@@ -111,11 +112,9 @@ export class PatrolEngine {
                     this.rotateToken(dX, dY, token);
                 }
 
-                if (patrolData.delayPeriod.length == points.length) {
-                    await sleep(patrolData.delayPeriod[iterator]);
-                } else {
-                    await sleep(patrolData.delayPeriod[Math.floor(Math.random() * patrolData.delayPeriod.length)]);
-                }
+                // Per-point delay when the pool matches the point count — unless the
+                // pool is a randomized range ("1-3"), which picks a random value per step.
+                await sleep(pickDelayPeriod(patrolData.delayPeriod, patrolData.randomDelay, iterator, points.length));
                 if (!this.hasData(token.id)) return;
 
                 if (

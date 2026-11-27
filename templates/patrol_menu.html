@@ -30,8 +30,8 @@
                 </li>
                 <li>
                     <label>Set Token delays</label>
-                    <textarea name="delayPeriod" data-dtype="String" placeholder='Ex1: "2,3,4,5" Ex2: "2-4" (1,2,3,4)'>{{delayPeriod}}</textarea>
-                    <p class="notes">This will set the delays the token will wait between points.</p>
+                    <textarea name="delayPeriod" data-dtype="String" placeholder='Ex1: "2,3,4,5" Ex2: "2-4" Ex3: "1.5, 2.5"'>{{delayPeriod}}</textarea>
+                    <p class="notes">This will set the delays (in seconds) the token will wait between points. Decimals use a dot, e.g. 1.5; commas separate values. A range like 2-4 is randomized: each move waits a random value between the bounds in 0.5s steps.</p>
                 </li>
             </ul>
         </div>

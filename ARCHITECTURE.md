@@ -19,8 +19,9 @@ RouteDrawing: animated dashed Graphics line + one marker circle Graphics per poi
 canvas element pointerdown → registerCanvasPointInteraction() (point-interaction.js)
    │  (dropped when the press lands on a token — tokenAtWorldPoint)
    │  clientToWorld() (coords.js, via stage.toLocal) → RouteDrawing.hitTestMarker() →
-   │  left: select (ring + popup) + arm drag · drag: move + snap + movePlotPoint() on release
-   │  right: removePlotPoint() · empty click / Escape: clear selection
+   │  left button only: select (ring + popup) + arm drag · drag: move + snap +
+   │  movePlotPoint() on release · empty click / Escape: clear selection
+   │  (right-click is ignored — points are deleted via the popup's Delete button)
    ▼
 controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → livePlotUpdate() → _syncRoutesFlag() + layer.draw() → back to top
 ```
@@ -60,8 +61,9 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
   `TokenPatrollerManager.tokenMap[tokenId]` holds `plots` (array of `{x,y}`
   top-left of grid cell), `linearPath`, `countinousRoutes`,
   `endCountinousRoutes`, `isLinear`, `inverted`, `isWalking`, `lastPos`,
-  `lastRecordedLocation`, `delayPeriod` (ms array), `color`, quotes, vision/audio
-  settings, etc.
+  `lastRecordedLocation`, `delayPeriod` (ms array), `randomDelay` (true when
+  `delayPeriod` is a randomized range pool from an input like "1-3"), `color`,
+  quotes, vision/audio settings, etc.
 - `_syncRoutesFlag()` projects every token's `plots` into the scene flag `routes`
   via `routesFromTokenMap()` (routes-layer.js)
   (`{ tokenId: { points, dash, gap, offset, color, fb, tokenId } }`) — this is what
@@ -85,10 +87,13 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
 
 - `TokenPatrollerManager` owns `tokenMap` and creates one `PatrolEngine`, injecting
   `getData`/`hasData`/`persist` accessors so the engine never touches storage itself.
-- `startPatrol` parses the delay string (`delay.js` → `_handleDelayPeriod`), then
+- `startPatrol` parses the delay string (`delay.js` → `_handleDelayPeriod`; seconds as ints or dot-decimals like `1.5`, comma lists, `-` ranges), then
   `PatrolEngine.start(token)` loops `_navigationCycle` → `_navigationLoop` over
   `plots` (or `linearPath`/`countinousRoutes` when `isLinear` on square grids),
-  sleeping `delayPeriod[iterator]`, moving the token via
+  sleeping `pickDelayPeriod(delayPeriod, randomDelay, iterator, points.length)`
+  (delay.js: per-point when the pool length matches the point count and the pool
+  is NOT a random range, else a random entry — a range like "1-3" expands in 0.5s
+  steps and is always picked randomly per step), moving the token via
   `token.document.update({x,y})`, then `speechHandler.handleSpeech`,
   `visionHandler.evaluateSight`, storing `lastPos`. Stops when `isWalking` flips
   false (stopPatrol, token moved manually (`_wasTokenMoved`), combat pause, etc.).
@@ -124,13 +129,13 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
   rectangle) while the token layer is the active layer. A press on a token belongs
   to Foundry's token layer, so a point under the token is never selected, dragged,
   or deleted (otherwise dragging a token on a point drags the point).
-  - left button → `beginMarkerDrag(index, normalizedEvent)`: selects
+  - left button (the only button handled; right-click is left to Foundry) →
+    `beginMarkerDrag(index, normalizedEvent)`: selects
     (`_selectPoint` → white ring + `showPointMenu` at client coords) and arms a
     drag via window `pointermove`/`pointerup`/`pointercancel`; `_dragMarkerMove`
     moves the point live (snapped by `_snapPointToGrid` unless gridless), redraws
     marker+ring+line; `_dragMarkerEnd` persists with `movePlotPoint` only if it
     actually dragged.
-  - right button → `removePlotPoint(tokenId, index)`.
   - no hit → `clearAllSelections()` (clears rings + closes popup). Escape does the
     same via `controls.js`.
 - `controls.js` also holds `patrolToolState = { selected: {tokenId, index} | null }`,
@@ -149,7 +154,7 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
 - **Token HUD** (`hud.js`, on `renderTokenHUD`): Add Point (map icon) →
   `addPlotPoint`; trash → `deleteProcess` dialog; recycle/arrows → `_setInverse`
   (cycle vs forwards-backwards); line/linear → `_setLinear`; walking →
-  `startPatrol`/`stopPatrol`; delay text field; caret → `PatrolMenu` (menu.js +
+  `startPatrol`/`stopPatrol`; delay text field (seconds, dot-decimals like `1.5`; a range like `1-3` is a random delay in 0.5s steps, shown back as `1-3`; invalid input reverts to the previous value on blur); caret → `PatrolMenu` (menu.js +
   `templates/patrol_menu.html`), which writes back through
   `updateFormRelatedData`.
 - **Keybindings** (`keys.js`, GM, Ctrl+Shift+…): start/stop all, add plot point for
@@ -184,7 +189,7 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
 foundry-patrol.js ──► config, tp, store, patroller, hud, routes-layer, point-interaction, keys, scene-control, vision, speech, audio, util
 scene-control.js ──► keys (startAllRoutes/haltAllRoutes)
 patroller.js ──────► tp, util, schema, delay, linear-routes, patrol-engine, routes-layer (routesFromTokenMap), controls (dialog)
-patrol-engine.js ──► config, tp, util
+patrol-engine.js ──► config, tp, util, delay (pickDelayPeriod)
 linear-routes.js ──► (leaf, no module imports)
 delay.js ──────────► (leaf)
 schema.js ─────────► (leaf)
@@ -217,10 +222,10 @@ side effects to these modules.
 - **Move a point:** same pointerdown → window `pointermove` → `_dragMarkerMove`
   (snap, redraw) → `pointerup` → `_dragMarkerEnd` → `movePlotPoint` →
   `_saveAndUpdate` + `livePlotUpdate` → redraw (selection re-applied by `_restoreSelection`).
-- **Delete a point:** right-click → `removePlotPoint`, or popup button / HUD dialog → same.
-- **Start patrol:** HUD/keybind/macro → `startPatrol` → `_handleDelayPeriod` (delay.js)
+- **Delete a point:** popup **Delete point** button / HUD trash dialog → `removePlotPoint` (right-click no longer deletes).
+- **Start patrol:** HUD/keybind/macro → `startPatrol` → `_handleDelayPeriod` (delay.js; sets `randomDelay` when the input contains a range)
   → `PatrolEngine.start` → `_navigationCycle/_navigationLoop` → per point: delay
-  sleep, `token.document.update`, speech/vision/audio, `lastPos`.
+  sleep (`pickDelayPeriod`: random per step for range pools), `token.document.update`, speech/vision/audio, `lastPos`.
 
 ## Gotchas (details in AGENTS.md)
 
