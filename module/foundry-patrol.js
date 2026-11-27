@@ -51,6 +51,10 @@ async function onReady() {
     TP.visionHandler = new VisionHandler();
     TP.audioHandler = new AudioHandler();
     TP.speechHandler = new SpeechHandler();
+    // Migration for scenes saved while the routes flag was merge-written (pre
+    // 3.3.2): recompute the render cache from the patrols flag (the source of
+    // truth), dropping only entries whose points no longer exist.
+    await TP.tokenPatroller.livePlotUpdate();
     const module = game.modules.get(MODULE);
     if (module) module.api = TP;
 }

@@ -36,7 +36,10 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
   point-picking listener from `point-interaction.js` (re-bound on every canvas
   (re)draw; idempotent).
 - `Hooks.once("ready")`: creates `TP.patrolDataManager`, and for GMs
-  `TP.tokenPatroller`, `TP.visionHandler`, `TP.audioHandler`, `TP.speechHandler`.
+  `TP.tokenPatroller`, `TP.visionHandler`, `TP.audioHandler`, `TP.speechHandler`;
+  then runs `livePlotUpdate()` once — the pre-3.3.2 migration that recomputes
+  the "routes" render cache from the patrols flag, dropping stale entries
+  left behind by the old merge-written flag (dead, unselectable circles).
 - Hooks: `renderTokenHUD` → `TokenHud.HUD` (hud.js); `controlToken` →
   `livePlotUpdate(token.id)` on select, redraw on deselect; `deleteToken` /
   `preDeleteAmbientSound` → cleanup in patroller.
@@ -57,7 +60,10 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
   via `routesFromTokenMap()` (routes-layer.js)
   (`{ tokenId: { points, dash, gap, offset, color, fb, tokenId } }`) — this is what
   `RoutesLayer._draw()` renders. `livePlotUpdate()` = `_syncRoutesFlag()` +
-  `routesLayer()?.draw()`; call it after every mutation.
+  `routesLayer()?.draw()`; call it after every mutation. `_syncRoutesFlag()`
+  skips the flag write when it already matches the projection (`store.js`
+  `saveRoutes()` unsets the flag first, because `setFlag` diff-merges objects and
+  would otherwise keep entries of tokens whose points were all deleted).
 - Public point API on `TP.tokenPatroller` (patroller.js, the facade): `addPlotPoint(tokenId)`,
   `removePlotPoint(tokenId, index)`, `movePlotPoint(tokenId, index, {x,y})`,
   `removeTokenRoute(tokenId, removeAll)`, `startPatrol(delay, tokenId)`,

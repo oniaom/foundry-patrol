@@ -4,6 +4,7 @@ All notable changes to this project will be documented in this file.
 ## [3.3.2] - Bug fix
 ### Fixed:
 - Fixed patrol point visuals (the dashed route line and point circles) staying on the map after deleting all of a token's points (HUD trash dialog, popup delete, or right-click): Foundry's `setFlag` diff-merges objects, so the token's stale entry in the scene `routes` render-cache flag was never removed — the layer kept drawing it while the underlying `plots` were empty, leaving dead, unselectable circles. `saveRoutes()` in `module/store.js` now unsets the `routes` flag before writing it (and skips the set entirely when the projection is empty), so the layer redraws with the deleted route gone.
+- **Migration:** on world load, the module now recomputes the scene's `routes` render cache from the `patrols` flag (the source of truth). Scenes saved before this fix are cleaned up automatically — only stale entries (tokens whose points were all deleted, or tokens that were deleted) are removed; existing routes are re-written identically. `_syncRoutesFlag()` also skips the flag write when the cache already matches, so the migration costs nothing once a scene is clean.
 
 ### Removed:
 - Removed the "Clear Routes" keyboard shortcut (Ctrl+Shift+D) and its `clearAllRoutes` handler from `module/keys.js`. Deleting routes remains available via the HUD trash dialog and per-point deletion.

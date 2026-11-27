@@ -294,10 +294,15 @@ export class TokenPatrollerManager {
     /**
      * Writes every token's plotted points into the scene "routes" flag, so the
      * RoutesLayer can render all routes persistently (not just the selected token).
+     * The write is skipped when the flag already matches the projection, so the
+     * ready-time migration below costs nothing once a scene is clean.
      */
     async _syncRoutesFlag() {
         if (!canvas.scene) return;
-        await TP.patrolDataManager.saveRoutes(routesFromTokenMap(this.tokenMap));
+        const routes = routesFromTokenMap(this.tokenMap);
+        const current = await TP.patrolDataManager.getRoutes();
+        if (JSON.stringify(current) === JSON.stringify(routes)) return;
+        await TP.patrolDataManager.saveRoutes(routes);
     }
 
     // ------------------------------------------------------------------
