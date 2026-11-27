@@ -32,9 +32,14 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
   the Patrol Tool scene control (`scene-control.js` → `registerPatrolControl()`),
   Handlebars helpers, the custom canvas layer
   (`CONFIG.Canvas.layers.patrolRoutes = { layerClass: RoutesLayer, group: "primary" }`),
-  and `Hooks.on("canvasReady", registerCanvasPointInteraction)` — the DOM-level
-  point-picking listener from `point-interaction.js` (re-bound on every canvas
-  (re)draw; idempotent).
+  and `Hooks.on("canvasReady", onCanvasReady)` — the DOM-level point-picking
+  listener from `point-interaction.js` (re-bound on every canvas (re)draw;
+  idempotent) plus, when the viewed scene actually changed, a reload of the
+  patrol tokenMap from the new scene (`TP.tokenPatroller.reloadFromScene()`:
+  halts old-scene patrol loops without persisting, re-reads the `patrols` flag,
+  re-syncs the `routes` flag and redraws the layer). An in-place scene switch
+  fires `canvasReady`, not `ready`, so without this the stale previous-scene
+  tokenMap would be synced into the new scene's flags.
 - `Hooks.once("ready")`: creates `TP.patrolDataManager`, and for GMs
   `TP.tokenPatroller`, `TP.visionHandler`, `TP.audioHandler`, `TP.speechHandler`;
   then runs `migrateAllSceneRoutes()` — the pre-3.3.2 migration that recomputes
@@ -71,6 +76,10 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
   `stopPatrol(tokenId)`, plus the generated field getters (`getVisionChecking`,
   `getPatrolQuotes`, ... — see the `FIELD_GETTERS` table). `removePlotPoint`/
   `movePlotPoint` also rebuild linear routes when `isLinear`.
+- The manager remembers which scene the tokenMap was loaded from (`sceneId`,
+  set in `initializeHashTable()`/`reloadFromScene()`); `_ownsViewedScene()` gates
+  `_saveAndUpdate()` and `_syncRoutesFlag()` so patrol data is never persisted
+  into a different scene's flags (cross-scene pollution guard).
 
 ## Patrol engine — `patrol-engine.js` (driven by `patroller.js`)
 
@@ -103,10 +112,14 @@ controls.js popup (showPointMenu/closePointMenu) → patroller.js mutations → 
   AGENTS.md gotchas): `registerCanvasPointInteraction()` (point-interaction.js)
   binds one `pointerdown` listener on `canvas.app.view`; `onCanvasPointerDown`
   converts the event with `clientToWorld()` (coords.js: bounding rect → canvas
-  bitmap px → `stage.toLocal`) and runs `drawing.hitTestMarker(world.x, world.y)`
+  bitmap px → **divided by `renderer.resolution`**, matching PIXI v8's
+  `EventSystem.mapPositionToPoint` → `stage.toLocal`) and runs
+  `drawing.hitTestMarker(world.x, world.y)`
   (distance ≤ markerRadius+6 around the point center at `point + grid/2`). Before
   hit-testing, the event is dropped when `tokenAtWorldPoint(world)` finds a token
-  under the pointer — `canvas.tokens.hover` first, else a geometric check
+  under the pointer — `canvas.tokens.hover` first (only when it is a live
+  placeable of the current scene; a stale hover from a previous scene must not
+  drop every press), else a geometric check
   (`token.bounds.contains`, falling back to the token document's grid-cell
   rectangle) while the token layer is the active layer. A press on a token belongs
   to Foundry's token layer, so a point under the token is never selected, dragged,

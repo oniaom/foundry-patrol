@@ -32,8 +32,10 @@ function tokenAtWorldPoint(world) {
     const tokenLayer = canvas?.tokens;
     if (!tokenLayer) return null;
     // Foundry's own hover tracking already respects token visibility and layer
-    // interactivity.
-    if (tokenLayer.hover) return tokenLayer.hover;
+    // interactivity. Ignore a stale hover (e.g. left over from the previous
+    // scene before the first pointermove): it would drop every press.
+    const hover = tokenLayer.hover;
+    if (hover && hover.destroyed !== true && tokenLayer.get?.(hover.id) === hover) return hover;
     // Geometric fallback for a pointerdown that happens before any pointermove at
     // this spot (e.g. the token was moved under a stationary cursor). Only applies
     // while the token layer is the active layer, so other tools can still reach
