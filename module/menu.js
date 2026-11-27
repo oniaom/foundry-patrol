@@ -177,5 +177,15 @@ export class PatrolMenu extends FormApplication {
         langSelect?.addEventListener("change", () => {
             if (langSelect.value) this.language = langSelect.value;
         });
+
+        // Enter in the delay textarea saves/submits the form (like the Submit
+        // button); Shift+Enter still inserts a newline.
+        const delayField = root.querySelector('textarea[name="delayPeriod"]');
+        delayField?.addEventListener("keydown", (ev) => {
+            if (ev.key !== "Enter" || ev.shiftKey) return;
+            ev.preventDefault();
+            if (typeof root.requestSubmit === "function") root.requestSubmit();
+            else root.querySelector(".submit-button")?.click();
+        });
     }
 }

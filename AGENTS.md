@@ -86,6 +86,10 @@ ARCHITECTURE.md      codebase map — read with this file, keep in sync
   button (`removePlotPoint`). Right-click on the canvas is left entirely to
   Foundry's own context menus — an accidental right-click must not delete a point.
   Keep it that way.
+- **Deprecated globals:** in v13+ prefer the namespaced forms (`foundry.documents.BaseChatMessage`,
+  `foundry.documents.BaseMacro`, `foundry.appv1.api.*`, `foundry.canvas.layers.CanvasLayer`, ...) and
+  only fall back to the bare global — bare globals like `ChatMessage`/`Macro`/`Tour` log deprecation
+  warnings since v13 (removal in v15). (`Tour` is not referenced by this module at all.)
 - **Delay decimals use a dot, never a comma.** Commas are the list separator in
   the delay string ("1,5" = delays 1s and 5s), so comma→dot auto-conversion is NOT
   done; the HUD delay field instead reverts invalid input to the previous value on
@@ -112,10 +116,12 @@ ARCHITECTURE.md      codebase map — read with this file, keep in sync
   (render cache synced by `TokenPatrollerManager._syncRoutesFlag`). Never add new
   storage without updating `ARCHITECTURE.md`.
 - Route rendering is **GM-only** (`RoutesLayer._draw` sets `visible = game.user.isGM`).
-- **Scene-control tools need `button: true` for `onClick` in v13/v14.** Without it the
-  click only moves `activeTool` and the handler fires late, on the next control
-  activation. Keep `activeTool: ""` on the control so opening it never fires a tool.
-  See `module/scene-control.js`.
+- **Scene-control tools need `button: true` AND an `onChange` handler in v13/v14.**
+  The v13/v14 `SceneControlTool` schema fires `onChange(event, active)` for button
+  tools — `onClick` alone is silently ignored there (the Patrol Tool buttons used to
+  do nothing). `module/scene-control.js` sets both (`onClick` kept as a fallback;
+  the handlers are idempotent). Keep `activeTool: ""` on the control so opening it
+  never fires a tool. See `module/scene-control.js`.
 - After any mutation of plot points call `livePlotUpdate()` (syncs the `routes` flag
   and redraws the layer). The layer's `_draw()` recreates all children, so any
   per-frame/selection state must be re-applied there (`_restoreSelection()`).

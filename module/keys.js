@@ -1,6 +1,10 @@
 import { MODULE } from "./config.js";
 import { TP } from "./tp.js";
 
+// v13+ namespaced document class — the bare `Macro` global is deprecated since
+// v13 (removal in v15), so prefer foundry.documents and only fall back.
+const Macro = foundry.documents?.BaseMacro ?? globalThis.Macro;
+
 /** Tokens the keybindings act on: controlled tokens, else all owned tokens. */
 function affectedTokens() {
     const controlled = canvas.tokens.controlled;

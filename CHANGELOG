@@ -1,6 +1,12 @@
 # Changelog
 All notable changes to this project will be documented in this file.
 
+## [3.5.1] - Bug fix
+### Fixed:
+- The Patrol Tool's **Start all patrols / Stop all patrols** buttons did nothing in v13/v14: the v13+ `SceneControlTool` schema fires `onChange(event, active)` for `button: true` tools, and `onClick` alone is silently ignored there. The tools now set both `onChange` and `onClick` (`module/scene-control.js`), so the buttons work again — previously tokens only started via each token's HUD route button or the Ctrl+Shift+G keybinding.
+- Pressing **Enter** in a delay field now saves it: in the token HUD delay field, Enter validates and persists the value (invalid input reverts immediately) instead of waiting for a click on another button (`module/hud.js`); in the Patrol Menu, Enter in the delay textarea submits the form like the Submit button (Shift+Enter still inserts a newline) (`module/menu.js`).
+- Removed deprecated global accesses from this module: `ChatMessage` → `foundry.documents.BaseChatMessage` (`module/speech.js`) and `Macro` → `foundry.documents.BaseMacro` (`module/keys.js`). Bare globals log deprecation warnings since v13 (removal in v15) — the same warning class as the reported `Tour` one, which originates in Foundry core (`foundry-ui-overrides.js`) / monks-wall-enhancement, not in foundry-patrol (no `Tour` reference exists in this module).
+
 ## [3.5.0] - Floating point + randomized range delays; right-click no longer deletes points
 ### Added:
 - Move delay periods now accept floating point seconds: decimals use a dot, e.g. `1.5`, `1.5, 2.5`. Works in both the HUD delay field and the Patrol Menu. Commas remain the list separator (`1,5` = the two delays 1s and 5s), never a decimal separator. In the HUD delay field, invalid input (letters, a second dot, empty) reverts to the previous value when you click out of the field; the Patrol Menu keeps the stored delays on invalid input.

@@ -1,6 +1,10 @@
 import { MODULE } from "./config.js";
 import { TP } from "./tp.js";
 
+// v13+ namespaced document class — the bare `ChatMessage` global is deprecated
+// since v13 (removal in v15), so prefer foundry.documents and only fall back.
+const ChatMessage = foundry.documents?.BaseChatMessage ?? globalThis.ChatMessage;
+
 /** Which per-token quote list each speech type draws from (methods on TP.tokenPatroller). */
 const QUOTE_GETTERS = {
     patrol: "getPatrolQuotes",
